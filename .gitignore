@@ -1,0 +1,20 @@
+# Secrets & local environment — never commit credentials
+.env
+*.env
+**/.env
+!.env.example
+!**/.env.example
+
+# Runtime / persistence data
+data/*.json
+**/data/*.json
+*.log
+**/*.log
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# OS / editor noise
+.DS_Store
+*.code-workspace

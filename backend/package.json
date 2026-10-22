@@ -1,0 +1,30 @@
+{
+  "name": "agent-watchtower-backend",
+  "version": "1.0.0",
+  "description": "Agent Watchtower Universal Monitoring and Intelligence Platform Core Backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "jest --runInBand --detectOpenHandles",
+    "test:external-agents": "node scripts/test_external_agents.js"
+  },
+  "keywords": [
+    "universal",
+    "monitoring",
+    "intelligence",
+    "registry",
+    "contract",
+    "agent"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^18.0.5",
+    "express": "^4.19.2",
+    "mysql2": "^3.24.5"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.4"
+  }
+}

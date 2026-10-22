@@ -1,0 +1,8 @@
+{
+  "name": "agent-watchtower-frontend",
+  "version": "1.0.0",
+  "description": "Agent Watchtower Single-Page Application Frontend",
+  "scripts": {
+    "start": "node -e \"const http=require('http'),fs=require('fs');http.createServer((req,res)=>{res.writeHead(200,{'Content-Type':'text/html'});fs.createReadStream('index.html').pipe(res);}).listen(5000,()=>console.log('Frontend server running at http://localhost:5000'));\""
+  }
+}

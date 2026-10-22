@@ -1,0 +1,32 @@
+{
+  "name": "universal-monitoring-platform",
+  "version": "1.0.0",
+  "description": "Universal Monitoring and Intelligence Platform Core",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "start:backend": "npm --prefix backend start",
+    "start:frontend": "npm --prefix frontend start",
+    "test": "npm --prefix backend test",
+    "test:external-agents": "npm --prefix backend run test:external-agents"
+  },
+  "keywords": [
+    "universal",
+    "monitoring",
+    "intelligence",
+    "registry",
+    "contract",
+    "agent"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^18.0.5",
+    "express": "^4.19.2",
+    "mysql2": "^3.24.5"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.4"
+  }
+}
