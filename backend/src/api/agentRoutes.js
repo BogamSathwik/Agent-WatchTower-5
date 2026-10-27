@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth, requireRole, ROLES } = require('../middleware/authMiddleware');
 const { auditLogService } = require('../audit/AuditLogService');
+const { defaultComplianceEngine } = require('../quality/AgentComplianceEngine');
 
 router.use(requireAuth);
 
@@ -18,6 +19,16 @@ function getService(req) {
     }
     return service;
 }
+
+// 0. POST /api/v1/agents/scan-compliance — Scan candidate or contract against 9 core agent rules
+router.post(['/api/v1/agents/scan-compliance', '/api/agents/scan-compliance'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), (req, res) => {
+    try {
+        const report = defaultComplianceEngine.scan(req.body || {});
+        res.json({ success: true, data: report });
+    } catch (err) {
+        res.status(400).json({ success: false, error: { message: err.message } });
+    }
+});
 
 // 1. POST /api/v1/agents/register
 router.post(['/api/v1/agents/register', '/api/agents/register'], requireRole([ROLES.ADMIN]), (req, res) => {
@@ -35,16 +46,25 @@ router.post(['/api/v1/agents/register', '/api/agents/register'], requireRole([RO
 });
 
 // 2. GET /api/v1/agents
-router.get(['/api/v1/agents', '/api/agents'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), (req, res) => {
+router.get(['/api/v1/agents', '/api/agents'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), async (req, res) => {
     try {
         const service = getService(req);
+        if (typeof service.loadMasterAgents === 'function') {
+            await service.loadMasterAgents(req.query.force === 'true');
+        }
         const filters = {
             category: req.query.category,
             lifecycleState: req.query.lifecycleState,
             search: req.query.search
         };
-        const agents = service.listAgents(filters).map(a => a.sanitize());
-        res.json({ success: true, data: agents });
+        let agents = service.listAgents(filters).map(a => a.sanitize());
+        const total = agents.length;
+        if (req.query.limit !== undefined) {
+            const limit = Math.max(1, parseInt(req.query.limit, 10) || 50);
+            const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+            agents = agents.slice(offset, offset + limit);
+        }
+        res.json({ success: true, data: agents, total });
     } catch (err) {
         res.status(500).json({ success: false, error: { message: err.message } });
     }
@@ -99,6 +119,62 @@ router.get(['/api/v1/agents/:id/summary', '/api/agents/:id/summary'], requireRol
             success: false,
             error: { message: err.message, code: 'SUMMARY_ERROR' }
         });
+    }
+});
+
+// 3c. GET /api/v1/agents/:id/compliance (9 Core Autonomous Rules Compliance Audit)
+router.get(['/api/v1/agents/:id/compliance', '/api/agents/:id/compliance'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), async (req, res) => {
+    try {
+        const service = getService(req);
+        const agent = service.getAgent(req.params.id);
+        if (!agent) {
+            return res.status(404).json({ success: false, error: { message: `Agent '${req.params.id}' not found`, code: 'AGENT_NOT_FOUND' } });
+        }
+        let report = (agent.compliance && typeof agent.compliance === 'object' && agent.compliance.complianceScore !== undefined)
+            ? agent.compliance
+            : defaultComplianceEngine.scan(agent.sanitize ? agent.sanitize() : agent);
+
+        if (req.query.live === 'true' || req.query.live === '1') {
+            try {
+                report = await service.auditRuntimeCompliance(req.params.id);
+            } catch (_) {}
+        }
+        res.json({ success: true, data: report });
+    } catch (err) {
+        res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// 3d. POST /api/v1/agents/:id/runtime-audit (Trigger Live Runtime Telemetry & Health Audit)
+router.post(['/api/v1/agents/:id/runtime-audit', '/api/agents/:id/runtime-audit'], requireRole([ROLES.ADMIN, ROLES.OPERATOR]), async (req, res) => {
+    try {
+        const service = getService(req);
+        const report = await service.auditRuntimeCompliance(req.params.id, req.body || {});
+        res.json({ success: true, data: report });
+    } catch (err) {
+        const status = err.statusCode || (err.message && err.message.includes('not found') ? 404 : 500);
+        res.status(status).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// 3e. POST /api/v1/agents/:id/remediate-compliance (Execute Automated Compliance Remediation)
+router.post(['/api/v1/agents/:id/remediate-compliance', '/api/agents/:id/remediate-compliance'], requireRole([ROLES.ADMIN, ROLES.OPERATOR]), async (req, res) => {
+    try {
+        const service = getService(req);
+        const report = await service.remediateCompliance(req.params.id);
+        if (auditLogService && typeof auditLogService.logEvent === 'function') {
+            auditLogService.logEvent({
+                actor: req.user ? req.user.username : 'operator',
+                action: 'REMEDIATE_AGENT_COMPLIANCE',
+                resourceId: req.params.id,
+                status: 'SUCCESS',
+                metadata: { newScore: report.complianceScore, status: report.status }
+            });
+        }
+        res.json({ success: true, message: 'Automated compliance remediation applied', data: report });
+    } catch (err) {
+        const status = err.statusCode || (err.message && err.message.includes('not found') ? 404 : 500);
+        res.status(status).json({ success: false, error: { message: err.message } });
     }
 });
 

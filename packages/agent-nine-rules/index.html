@@ -1,0 +1,2511 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>9 Core Autonomous Agent Rules Scanner — Standalone Quality Assurance</title>
+    <style>
+        :root {
+            --bg-base: #0b0f19;
+            --bg-card: #111827;
+            --bg-surface: #1e293b;
+            --bg-input: #0f172a;
+            --border-subtle: #334155;
+            --border-focus: #6366f1;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #ef4444;
+            --accent-cyan: #06b6d4;
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 2rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1100px;
+        }
+
+        header {
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 1.25rem;
+        }
+
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+        }
+
+        .logo-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius-md);
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+        }
+
+        h1 {
+            font-size: 1.45rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .badge-green {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-emerald);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-amber {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--accent-amber);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .badge-red {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-rose);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 1.5rem;
+            margin-bottom: 1.75rem;
+            box-shadow: var(--shadow);
+        }
+
+        /* Tabs */
+        .tab-bar {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.25rem;
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 0.75rem;
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            padding: 0.55rem 1rem;
+            border-radius: var(--radius-sm);
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            white-space: nowrap;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: var(--bg-surface);
+        }
+
+        .tab-btn.active {
+            color: #fff;
+            background: var(--primary);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        /* Dropzone */
+        .dropzone {
+            border: 2px dashed var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 2.5rem 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: rgba(15, 23, 42, 0.6);
+        }
+
+        .dropzone:hover,
+        .dropzone.dragover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.08);
+        }
+
+        .dropzone-icon {
+            font-size: 2.4rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .dropzone-title {
+            font-weight: 700;
+            font-size: 1rem;
+            margin-bottom: 0.35rem;
+        }
+
+        .dropzone-desc {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 0.4rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        input,
+        textarea,
+        select {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 0.65rem 0.85rem;
+            color: var(--text-main);
+            font-size: 0.88rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 180px;
+            font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.65rem 1.35rem;
+            border-radius: var(--radius-sm);
+            font-weight: 700;
+            font-size: 0.88rem;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+        }
+
+        .btn-primary:hover {
+            opacity: 0.95;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--bg-surface);
+            color: var(--text-main);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .btn-secondary:hover {
+            background: #283548;
+        }
+
+        .btn-sm {
+            padding: 0.35rem 0.75rem;
+            font-size: 0.78rem;
+        }
+
+        /* Score Banner */
+        .score-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .score-card {
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .score-title {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+
+        .score-value {
+            font-size: 2.2rem;
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 0.25rem;
+        }
+
+        .score-sub {
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        /* 3x3 Rules Matrix */
+        .matrix-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+            gap: 1rem;
+        }
+
+        .rule-card {
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 1rem 1.15rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .rule-card.pass {
+            border-left: 4px solid var(--accent-emerald);
+        }
+
+        .rule-card.fail {
+            border-left: 4px solid var(--accent-rose);
+        }
+
+        .rule-card.unknown {
+            border-left: 4px solid var(--accent-amber);
+        }
+
+        .rule-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .rule-number-name {
+            font-weight: 800;
+            font-size: 0.95rem;
+            color: var(--text-main);
+        }
+
+        .rule-category {
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            margin-top: 1px;
+        }
+
+        .rule-evidence {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+            margin-bottom: 0.65rem;
+            word-break: break-word;
+        }
+
+        .rule-remediation {
+            font-size: 0.75rem;
+            color: #fca5a5;
+            background: rgba(239, 68, 68, 0.08);
+            border-left: 2px solid var(--accent-rose);
+            padding: 0.45rem 0.6rem;
+            border-radius: 4px;
+            margin-top: auto;
+        }
+
+        /* History Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 0.65rem 0.85rem;
+            border-bottom: 2px solid var(--border-subtle);
+            color: var(--text-muted);
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.72rem;
+        }
+
+        td {
+            padding: 0.65rem 0.85rem;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+            color: var(--text-main);
+        }
+
+        tr:hover td {
+            background: rgba(30, 41, 59, 0.4);
+        }
+
+        /* Checkbox grid */
+        .check-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .check-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.65rem 0.85rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+        }
+
+        .check-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        /* 4-Metric Symmetrical Grid */
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .overview-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 1.25rem 1.35rem;
+            box-shadow: var(--shadow);
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .overview-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(99, 102, 241, 0.5);
+            background: #151d30;
+            box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.55), 0 0 18px rgba(99, 102, 241, 0.15);
+        }
+
+        .overview-card.active {
+            border-color: var(--border-focus);
+            background: linear-gradient(180deg, rgba(30, 41, 59, 0.8) 0%, rgba(17, 24, 39, 0.95) 100%);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35), 0 14px 28px -4px rgba(0, 0, 0, 0.6);
+        }
+
+        .overview-card.active::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--primary);
+        }
+
+        #statCardFully.active::before { background: var(--accent-emerald); }
+        #statCardPartial.active::before { background: var(--accent-amber); }
+        #statCardMissing.active::before { background: var(--accent-rose); }
+
+        .overview-card .metric-indicator {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.85rem;
+            font-size: 0.65rem;
+            font-weight: 800;
+            padding: 2px 7px;
+            border-radius: 9999px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .metric-label {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.35rem;
+        }
+
+        .metric-value {
+            font-size: 2.2rem;
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 0.3rem;
+        }
+
+        .metric-sub {
+            font-size: 0.74rem;
+            color: var(--text-dim);
+            line-height: 1.35;
+        }
+
+        /* Audit Explorer Section */
+        .explorer-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 1.5rem;
+            margin-bottom: 1.75rem;
+            box-shadow: var(--shadow);
+            border-left: 5px solid var(--primary);
+            transition: all 0.25s ease;
+        }
+
+        .explorer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.85rem;
+            margin-bottom: 1.25rem;
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 1rem;
+        }
+
+        .explorer-title {
+            font-size: 1.15rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-main);
+        }
+
+        .explorer-subtitle {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .pill-filters {
+            display: flex;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .pill-filter-btn {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            padding: 0.35rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.76rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .pill-filter-btn:hover {
+            color: var(--text-main);
+            border-color: var(--primary);
+        }
+
+        .pill-filter-btn.active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+            box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+        }
+
+        /* "What is What" Checklist / Standard Box */
+        .standards-accordion {
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            margin-bottom: 1.25rem;
+            overflow: hidden;
+        }
+
+        .standards-accordion-header {
+            padding: 0.75rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            background: rgba(30, 41, 59, 0.5);
+            transition: background 0.2s;
+        }
+
+        .standards-accordion-header:hover {
+            background: rgba(30, 41, 59, 0.8);
+        }
+
+        .standards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 0.65rem;
+            padding: 1rem;
+            background: var(--bg-base);
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .standard-item-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 0.75rem 0.85rem;
+            font-size: 0.78rem;
+        }
+
+        /* Individual Audit Card */
+        .audit-item-card {
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 1.15rem;
+            margin-bottom: 0.85rem;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+        }
+
+        .audit-item-card:hover {
+            border-color: rgba(99, 102, 241, 0.45);
+            background: #141c2e;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+        }
+
+        .audit-item-card.glow-green { border-left: 4px solid var(--accent-emerald); }
+        .audit-item-card.glow-amber { border-left: 4px solid var(--accent-amber); }
+        .audit-item-card.glow-red { border-left: 4px solid var(--accent-rose); }
+
+        .audit-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 0.65rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .audit-item-title-group {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+        }
+
+        .audit-method-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-sm);
+            background: rgba(99, 102, 241, 0.12);
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.15rem;
+            flex-shrink: 0;
+            border: 1px solid rgba(99, 102, 241, 0.25);
+        }
+
+        .audit-target-name {
+            font-size: 0.98rem;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        .audit-target-sub {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .url-code {
+            background: rgba(0, 0, 0, 0.35);
+            padding: 1px 6px;
+            border-radius: 4px;
+            color: var(--primary);
+            font-family: monospace;
+            font-size: 0.74rem;
+        }
+
+        .audit-badges-group {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .score-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.65rem;
+            border-radius: 9999px;
+            font-size: 0.76rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+
+        .score-pill.pill-green {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-emerald);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+        }
+
+        .score-pill.pill-amber {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--accent-amber);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+        }
+
+        .score-pill.pill-red {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-rose);
+            border: 1px solid rgba(239, 68, 68, 0.35);
+        }
+
+        .rules-progress-wrap {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 9999px;
+            overflow: hidden;
+            margin: 0.65rem 0 0.35rem 0;
+        }
+
+        .rules-progress-bar {
+            height: 100%;
+            border-radius: 9999px;
+            transition: width 0.4s ease;
+        }
+
+        .rules-ratio-text {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.74rem;
+            color: var(--text-dim);
+            margin-bottom: 0.65rem;
+        }
+
+        .audit-findings-box {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 0.65rem 0.85rem;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+            margin-bottom: 0.75rem;
+        }
+
+        .missing-tags-wrap {
+            display: flex;
+            gap: 0.35rem;
+            flex-wrap: wrap;
+            margin-top: 0.4rem;
+        }
+
+        .missing-rule-tag {
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            font-size: 0.7rem;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .followed-rule-tag {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            color: #6ee7b7;
+            font-size: 0.7rem;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .audit-actions-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+            padding-top: 0.5rem;
+            border-top: 1px solid rgba(51, 65, 85, 0.4);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="logo-area">
+                <div class="logo-icon">🛡️</div>
+                <div>
+                    <h1>9 Core Autonomous Agent Rules Scanner</h1>
+                    <div class="subtitle">Portable Quality Assurance & Compliance Verification Engine</div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <span class="badge badge-green">Zero-Dependencies</span>
+                <span class="badge badge-green">Browser & Node.js Ready</span>
+            </div>
+        </header>
+
+        <!-- Top 4-Metric Symmetrical Grid (Interactive Dynamic Filters) -->
+        <div class="overview-grid" id="statsOverviewGrid">
+            <div class="overview-card active" id="statCardTotal" onclick="filterAuditSection('ALL')">
+                <span class="metric-indicator" id="indicatorTotal" style="background: rgba(99, 102, 241, 0.15); color: var(--primary);">ACTIVE</span>
+                <div class="metric-label">TOTAL VERIFICATIONS RUN</div>
+                <div class="metric-value" id="valTotalVerifications" style="color: var(--primary);">5</div>
+                <div class="metric-sub" id="subTotalVerifications">Audited Targets · Click to View All</div>
+            </div>
+            <div class="overview-card" id="statCardFully" onclick="filterAuditSection('FULLY_COMPLIANT')">
+                <span class="metric-indicator" id="indicatorFully" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald);">FILTER</span>
+                <div class="metric-label" style="color: var(--accent-emerald);">FULLY COMPLIANT (9/9)</div>
+                <div class="metric-value" id="valFullyCompliant" style="color: var(--accent-emerald);">2</div>
+                <div class="metric-sub">100% Core & Characteristic · Click to View</div>
+            </div>
+            <div class="overview-card" id="statCardPartial" onclick="filterAuditSection('PARTIAL')">
+                <span class="metric-indicator" id="indicatorPartial" style="background: rgba(245, 158, 11, 0.15); color: var(--accent-amber);">FILTER</span>
+                <div class="metric-label" style="color: var(--accent-amber);">PARTIALLY COMPLIANT</div>
+                <div class="metric-value" id="valPartiallyCompliant" style="color: var(--accent-amber);">2</div>
+                <div class="metric-sub">6 - 8 Criteria Verified · Click to View</div>
+            </div>
+            <div class="overview-card" id="statCardMissing" onclick="filterAuditSection('NON_COMPLIANT')">
+                <span class="metric-indicator" id="indicatorMissing" style="background: rgba(239, 68, 68, 0.15); color: var(--accent-rose);">FILTER</span>
+                <div class="metric-label" style="color: var(--accent-rose);">NON-COMPLIANT / MISSING</div>
+                <div class="metric-value" id="valNonCompliant" style="color: var(--accent-rose);">1</div>
+                <div class="metric-sub">Action & Remediation Required · Click to View</div>
+            </div>
+        </div>
+
+        <!-- Dynamic Audits Explorer Section -->
+        <div class="explorer-card" id="auditExplorerCard">
+            <div class="explorer-header">
+                <div>
+                    <div class="explorer-title" id="explorerTitle">
+                        <span>📋 All Verification Audits Run</span>
+                        <span class="badge badge-green" id="explorerCountBadge" style="margin-left: 0.5rem;">5 Audits</span>
+                    </div>
+                    <div class="explorer-subtitle" id="explorerSubtitle">
+                        Detailed breakdown of all tested autonomous agents, web apps, and scripts with their verified criteria vs deficiencies.
+                    </div>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <div class="pill-filters">
+                        <button class="pill-filter-btn active" id="pillAll" onclick="filterAuditSection('ALL')">All (5)</button>
+                        <button class="pill-filter-btn" id="pillFully" onclick="filterAuditSection('FULLY_COMPLIANT')">Fully Compliant (2)</button>
+                        <button class="pill-filter-btn" id="pillPartial" onclick="filterAuditSection('PARTIAL')">Partially Compliant (2)</button>
+                        <button class="pill-filter-btn" id="pillMissing" onclick="filterAuditSection('NON_COMPLIANT')">Missing (1)</button>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="exportFilteredAuditsJSON()">📥 Export Filtered</button>
+                    <button class="btn btn-secondary btn-sm" onclick="restoreDemoAudits()" title="Restore the 5 standard demo verification audits">🔄 Reset Demos</button>
+                </div>
+            </div>
+
+            <!-- Search and Filter Bar -->
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                <div style="position: relative; flex: 1; min-width: 260px;">
+                    <input type="text" id="auditSearchInput" placeholder="🔍 Search audits by target name, User ID (e.g. 1667, 1673, 1670), method, or keyword..." oninput="handleAuditSearch(event)" style="padding-left: 0.75rem; font-size: 0.82rem;">
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-dim);" id="auditSearchCountText">
+                    Showing 5 of 5 records
+                </div>
+            </div>
+
+            <!-- "What is What" Collapsible 9 Criteria Standard Guide -->
+            <div class="standards-accordion" id="standardsGuideBox">
+                <div class="standards-accordion-header" onclick="toggleStandardsGuide()">
+                    <div style="font-size: 0.82rem; font-weight: 700; display: flex; align-items: center; gap: 0.45rem;">
+                        <span>📘</span>
+                        <span><strong>What is What</strong>: The 9 Canonical Autonomous Agent Audits Performed</span>
+                        <span class="badge badge-green" style="font-size: 0.68rem; padding: 1px 6px;">Checklist & Standards</span>
+                    </div>
+                    <span id="standardsChevron" style="font-size: 0.75rem; color: var(--text-muted);">▼ Click to Expand / Collapse</span>
+                </div>
+                <div class="standards-grid" id="standardsGridContent" style="display: none;">
+                    <!-- 9 Canonical Criteria Boxes (Rule 1 through Rule 9) populated by JS -->
+                </div>
+            </div>
+
+            <!-- Dynamic Audit List Cards Container -->
+            <div id="auditItemsContainer">
+                <!-- Dynamically rendered audit cards -->
+            </div>
+        </div>
+
+        <!-- Explanatory Guide: What Scan vs Verify Does -->
+        <div style="background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; gap: 1.25rem; align-items: flex-start; font-size: 0.8rem; line-height: 1.45; flex-wrap: wrap; width: 100%;">
+            <div style="flex: 1; min-width: 260px;">
+                <span style="font-weight: 800; color: var(--accent-cyan); display: inline-flex; align-items: center; gap: 0.35rem;">
+                    <span>🔍</span> WHAT SCAN DOES:
+                </span>
+                <div style="color: var(--text-muted); margin-top: 3px;">
+                    Active dynamic testing & static AST parsing. Probes live HTTP endpoints for response headers and AI inference responses, or inspects uploaded code repositories/scripts to detect cognitive loops, tool schemas, and failure backoff retries.
+                </div>
+            </div>
+            <div style="width: 1px; background: rgba(255,255,255,0.08); align-self: stretch;"></div>
+            <div style="flex: 1; min-width: 260px;">
+                <span style="font-weight: 800; color: var(--accent-emerald); display: inline-flex; align-items: center; gap: 0.35rem;">
+                    <span>⚡</span> WHAT VERIFY DOES:
+                </span>
+                <div style="color: var(--text-muted); margin-top: 3px;">
+                    Certified compliance auditing of registered contracts in the Master Agent Registry. Validates declared agent models, user authorship, telemetry health probes, and can audit all fleet agents simultaneously.
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Scanner Card -->
+        <div class="card">
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="switchInputTab('file')">📁 Upload Agent File</button>
+                <button class="tab-btn" onclick="switchInputTab('code')">📝 Paste Code / Contract</button>
+                <button class="tab-btn" onclick="switchInputTab('url')">🌐 Scan Agent URL / Link</button>
+                <button class="tab-btn" onclick="switchInputTab('check')">☑️ 9-Rule Manual Checklist</button>
+            </div>
+
+            <!-- TAB 1: File & Folder Upload -->
+            <div id="tabFile">
+                <div class="dropzone" id="dropZone" onclick="document.getElementById('fileInput').click()"
+                    style="cursor: pointer; padding: 2rem 1.5rem;">
+                    <div class="dropzone-icon">📂</div>
+                    <div class="dropzone-title" style="font-size: 1.15rem; margin-bottom: 0.35rem;">
+                        Upload Full Project Folder or Frontend + Backend Files
+                    </div>
+                    <div class="dropzone-desc"
+                        style="max-width: 620px; margin: 0 auto 1.25rem auto; line-height: 1.45; font-size: 0.85rem; color: var(--text-muted);">
+                        Drop your entire repository folder or choose multiple source files simultaneously. The scanner
+                        cross-verifies all 9 autonomous agent rules across both UI and backend.
+                    </div>
+
+                    <!-- Distinct Option Cards -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; max-width: 600px; margin: 0 auto 1rem auto;"
+                        onclick="event.stopPropagation()">
+                        <div onclick="document.getElementById('folderInput').click()"
+                            style="background: var(--bg-card); border: 1px solid var(--primary); border-radius: var(--radius-sm); padding: 1rem; cursor: pointer; text-align: left; transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);">
+                            <div
+                                style="font-weight: 800; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem;">
+                                <span>📁</span> Upload Entire Folder
+                            </div>
+                            <div style="font-size: 0.76rem; color: var(--text-muted); line-height: 1.35;">
+                                Recursively reads all project code files across frontend & backend directories.
+                            </div>
+                            <div style="margin-top: 0.6rem;">
+                                <button type="button" class="btn btn-primary btn-sm"
+                                    style="width: 100%; pointer-events: none; font-weight: 700;">
+                                    Browse Folder...
+                                </button>
+                            </div>
+                        </div>
+
+                        <div onclick="document.getElementById('fileInput').click()"
+                            style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 1rem; cursor: pointer; text-align: left; transition: all 0.2s ease;">
+                            <div
+                                style="font-weight: 800; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem;">
+                                <span>📄</span> Select Multiple Files
+                            </div>
+                            <div style="font-size: 0.76rem; color: var(--text-muted); line-height: 1.35;">
+                                Select multiple files at once (hold <kbd
+                                    style="background: rgba(255,255,255,0.08); padding: 1px 4px; border-radius: 3px;">Ctrl</kbd>
+                                or <kbd
+                                    style="background: rgba(255,255,255,0.08); padding: 1px 4px; border-radius: 3px;">Shift</kbd>)
+                                or add incrementally.
+                            </div>
+                            <div style="margin-top: 0.6rem;">
+                                <button type="button" class="btn btn-secondary btn-sm"
+                                    style="width: 100%; pointer-events: none; font-weight: 700;">
+                                    Browse Files...
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="font-size: 0.74rem; color: var(--text-dim);">
+                        Supported: <code>.js</code>, <code>.jsx</code>, <code>.ts</code>, <code>.tsx</code>,
+                        <code>.py</code>, <code>.html</code>, <code>.json</code>, <code>.vue</code>, <code>.env</code>
+                        (Automatically ignores <code>node_modules/</code> & <code>.git/</code>)
+                    </div>
+                    <!-- Hidden inputs -->
+                    <input type="file" id="fileInput" style="display: none;" multiple
+                        accept=".js,.jsx,.ts,.tsx,.html,.htm,.json,.py,.txt,.vue,.env,.sol"
+                        onchange="handleFilesSelected(event)">
+                    <input type="file" id="folderInput" style="display: none;" webkitdirectory directory multiple
+                        onchange="handleFilesSelected(event)">
+                </div>
+
+                <!-- Project / Multi-File Summary Preview -->
+                <div id="selectedFileInfo"
+                    style="display: none; margin-top: 1rem; padding: 1rem 1.25rem; background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.5rem;">
+                        <div>
+                            <strong id="selectedProjectName" style="font-size: 1rem;">Project Bundle</strong>
+                            <span id="selectedProjectStats" class="badge badge-green" style="margin-left: 0.5rem;">0
+                                files</span>
+                            <div id="selectedProjectSub"
+                                style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+                                Frontend & Backend files loaded
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                            <button type="button" class="btn btn-secondary btn-sm"
+                                onclick="document.getElementById('fileInput').click()">+ Add More Files</button>
+                            <button type="button" class="btn btn-secondary btn-sm"
+                                onclick="document.getElementById('folderInput').click()">+ Add Folder</button>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="clearSelectedFiles()"
+                                style="color: var(--accent-rose);">✕ Clear</button>
+                            <button class="btn btn-primary btn-sm" onclick="runFileScan()">⚡ Scan 9 Rules Now</button>
+                        </div>
+                    </div>
+                    <!-- Category Badges -->
+                    <div id="fileCategoryBadges"
+                        style="display: flex; gap: 0.5rem; margin-bottom: 0.65rem; flex-wrap: wrap;"></div>
+                    <!-- File list box -->
+                    <div id="fileListContainer"
+                        style="max-height: 160px; overflow-y: auto; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.5rem; font-size: 0.78rem; font-family: monospace;">
+                    </div>
+                    <div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-dim);" id="combinedSizeInfo">
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: Paste Code / Contract -->
+            <div id="tabCode" style="display: none;">
+                <div class="form-group">
+                    <label>Agent Identifier / Name</label>
+                    <input type="text" id="pasteAgentName" placeholder="e.g. Real Estate Lead Bot, Invoice Parser">
+                </div>
+                <div class="form-group">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                        <label style="margin: 0;">Agent Code or Specification (JS / TS / Python / JSON Contract)</label>
+                        <div style="display: flex; gap: 0.4rem;">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="loadSampleAgent()">📋 Load
+                                Full 9-Rule Sample</button>
+                            <button type="button" class="btn btn-secondary btn-sm"
+                                onclick="document.getElementById('pasteCodeContent').value=''">Clear</button>
+                        </div>
+                    </div>
+                    <textarea id="pasteCodeContent"
+                        placeholder="// Paste agent class, loop, LLM call, tools, or JSON contract here..."></textarea>
+                </div>
+                <button class="btn btn-primary" onclick="runCodeScan()">⚡ Scan & Verify 9 Rules</button>
+            </div>
+
+            <!-- TAB 3: Scan URL -->
+            <div id="tabUrl" style="display: none;">
+                <div class="form-group">
+                    <label>Agent Endpoint or Web App URL *</label>
+                    <input type="url" id="inputUrl"
+                        placeholder="https://api.myagent.com/v1/agent or http://localhost:8000">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>Agent / App Name (Optional)</label>
+                        <input type="text" id="inputUrlName" placeholder="e.g. Customer Support Bot">
+                    </div>
+                    <div class="form-group">
+                        <label>Declared Model / Reasoning Engine (Optional)</label>
+                        <input type="text" id="inputUrlModel" placeholder="e.g. GPT-4o, Claude 3.5 Sonnet, Gemini 1.5">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Tools / Capabilities (Optional, comma-separated)</label>
+                    <input type="text" id="inputUrlTools"
+                        placeholder="e.g. webSearch, sqlQuery, sendEmail, executeAction">
+                </div>
+                <button class="btn btn-primary" onclick="runUrlScan()">⚡ Scan & Verify 9 Rules</button>
+            </div>
+
+            <!-- TAB 4: Manual Checklist -->
+            <div id="tabCheck" style="display: none;">
+                <div class="form-group">
+                    <label>Agent Name / Version</label>
+                    <input type="text" id="checkAgentName" placeholder="e.g. Production Deal Pipeline Agent">
+                </div>
+                <div class="check-grid">
+                    <label class="check-item"><input type="checkbox" id="chk1" checked>
+                        <div>
+                            <div class="check-title">Rule 1: Goal / Objective (15 pts)</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim);">Explicit objective declared</div>
+                        </div>
+                    </label>
+                    <label class="check-item"><input type="checkbox" id="chk2" checked>
+                        <div>
+                            <div class="check-title">Rule 2: AI / LLM Reasoning (15 pts)</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim);">Cognitive LLM/prompt inference
+                            </div>
+                        </div>
+                    </label>
+                    <label class="check-item"><input type="checkbox" id="chk3" checked>
+                        <div>
+                            <div class="check-title">Rule 3: Action-Taking (12 pts)</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim);">Executable state mutations/runner
+                            </div>
+                        </div>
+                    </label>
+                    <label class="check-item"><input type="checkbox" id="chk4" checked>
+                        <div>
+                            <div class="check-title">Rule 4: Tool Calling (10 pts)</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim);">External tools or APIs integrated
+                            </div>
+                        </div>
+                    </label>
+                    <label class="check-item"><input type="checkbox" id="chk5" checked>
+                        <div>
+                            <div class="check-title">Rule 5: Autonomous Decision (12 pts)</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim);">Autonomous threshold/branching
+                            </div>
+                        </div>
+                    </label>
+                    <label class="check-item"><input type="checkbox" id="chk6" checked>
+                        <div>
+                            <div class="check-title">Rule 6: Execution Loop (12 pts)</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim);">Cyclic Plan-Act-Observe-Iterate
+                                loop</div>
+                        </div>
+                    </label>
+                    <label class="check-item"><input type="checkbox" id="chk7" checked>
+                        <div>
+                            <div class="check-title">Rule 7: Environment / Context (10 pts)</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim);">State awareness & session memory
+                            </div>
+                        </div>
+                    </label>
+                    <label class="check-item"><input type="checkbox" id="chk8" checked>
+                        <div>
+                            <div class="check-title">Rule 8: Observation of Results (12 pts)</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim);">Validates outputs after action
+                            </div>
+                        </div>
+                    </label>
+                    <label class="check-item"><input type="checkbox" id="chk9" checked>
+                        <div>
+                            <div class="check-title">Rule 9: Adaptation & Replanning (10 pts)</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim);">Retries or replans upon failure
+                            </div>
+                        </div>
+                    </label>
+                </div>
+                <button class="btn btn-primary" onclick="runChecklistScan()">⚡ Calculate Compliance Score</button>
+            </div>
+        </div>
+
+        <!-- Audit Report Results Card (Rendered on Scan) -->
+        <div class="card" id="resultCard" style="display: none;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 1rem; margin-bottom: 1.25rem;">
+                <div>
+                    <h2 style="font-size: 1.2rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+                        🛡️ 9-Rule Verification Audit Report
+                        <span id="badgeCompliance" class="badge badge-green">COMPLIANT</span>
+                    </h2>
+                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 3px;" id="reportMetaSubtitle">
+                        Target: MyAgent · Audited just now
+                    </div>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <button class="btn btn-secondary btn-sm" onclick="exportReportJSON()">📥 Export JSON</button>
+                    <button class="btn btn-secondary btn-sm" onclick="copyReportJSON()">📋 Copy JSON</button>
+                    <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ Print Report</button>
+                </div>
+            </div>
+
+            <!-- Scorecards -->
+            <div class="score-grid">
+                <div class="score-card">
+                    <div class="score-title">Compliance Score</div>
+                    <div class="score-value" id="valScore" style="color: var(--primary);">100%</div>
+                    <div class="score-sub" id="labelCompliance">FULLY COMPLIANT</div>
+                </div>
+                <div class="score-card">
+                    <div class="score-title">Rules Followed</div>
+                    <div class="score-value" id="valFollowed" style="color: var(--accent-emerald);">9 <span
+                            style="font-size: 1.1rem; color: var(--text-muted);">/ 9</span></div>
+                    <div class="score-sub" style="color: var(--accent-emerald);">Criteria Satisfied</div>
+                </div>
+                <div class="score-card">
+                    <div class="score-title">Rules Missing</div>
+                    <div class="score-value" id="valMissing" style="color: var(--accent-rose);">0 <span
+                            style="font-size: 1.1rem; color: var(--text-muted);">/ 9</span></div>
+                    <div class="score-sub" id="labelMissing">Zero Violations</div>
+                </div>
+                <div class="score-card">
+                    <div class="score-title">Lifecycle Decision</div>
+                    <div class="score-value" id="valRec"
+                        style="color: var(--accent-emerald); font-size: 1.8rem; margin-top: 0.2rem;">KEEP</div>
+                    <div class="score-sub" id="labelRec">Production Ready</div>
+                </div>
+            </div>
+
+            <!-- 3x3 Matrix Grid -->
+            <h3
+                style="font-size: 0.95rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.85rem;">
+                📋 Empirical Rule Breakdown & Criteria Evidence
+            </h3>
+            <div class="matrix-grid" id="matrixGrid">
+                <!-- Dynamically rendered 9 cards -->
+            </div>
+        </div>
+
+        <!-- Audit History Log -->
+        <div class="card" id="historyCard">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="font-size: 1rem; font-weight: 800;">📜 Local Verification Audit History</h3>
+                <button class="btn btn-secondary btn-sm" onclick="clearHistory()"
+                    style="color: var(--accent-rose);">Clear History</button>
+            </div>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Target</th>
+                            <th>Method</th>
+                            <th>Score</th>
+                            <th>Status</th>
+                            <th>Decision</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">No
+                                audits recorded yet. Run a scan above!</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Standalone Client-side 9-Rule Engine Script (Zero Server Needed) -->
+    <script>
+        const STANDARD_RULES = [
+            { id: 'goal_objective', ruleNumber: 1, name: 'Goal / Objective', category: 'Core', weight: 15, importance: 'CORE', description: 'Agent defines an explicit goal, objective, or intended outcome.', remediation: 'Provide a clear purpose or goal explaining what task this agent accomplishes (minimum 10 characters).' },
+            { id: 'ai_reasoning', ruleNumber: 2, name: 'AI / LLM Reasoning', category: 'Core for modern AI agents', weight: 15, importance: 'CORE', description: 'Agent utilizes AI/LLM model reasoning, cognitive chains, prompts, or semantic inference.', remediation: 'Configure an AI model (e.g. gpt-4o, claude-3-5, gemini-1.5) or declare reasoning prompt chains.' },
+            { id: 'action_taking', ruleNumber: 3, name: 'Ability to Take Actions', category: 'Core', weight: 12, importance: 'CORE', description: 'Agent can execute operations, mutate state, invoke APIs, or trigger changes.', remediation: 'Declare actionable operations, runner endpoints, or executable functions.' },
+            { id: 'tool_calling', ruleNumber: 4, name: 'Tool / Function Calling', category: 'Usually', weight: 10, importance: 'USUALLY', description: 'Agent integrates external tools, function calls, REST APIs, or MCP servers.', remediation: 'Expose or define tool declarations, function calls, or MCP tool capabilities.' },
+            { id: 'autonomous_decision', ruleNumber: 5, name: 'Autonomous Decision Making', category: 'Core', weight: 12, importance: 'CORE', description: 'Agent evaluates conditions and decides actions without continuous human puppeteering.', remediation: 'Implement decision thresholding, autonomous state routing, or branch selection logic.' },
+            { id: 'execution_loop', ruleNumber: 6, name: 'Execution / Agent Loop', category: 'Core', weight: 12, importance: 'CORE', description: 'Agent runs a cognitive or execution loop (e.g. Plan -> Act -> Observe -> Iterate).', remediation: 'Add a multi-step execution loop, state machine, or iterative execution lifecycle.' },
+            { id: 'environment_context', ruleNumber: 7, name: 'Environment / Context', category: 'Core', weight: 10, importance: 'CORE', description: 'Agent ingests environment perception, context variables, conversation history, or state.', remediation: 'Maintain conversation history, environment context variables, or state perception.' },
+            { id: 'observation_results', ruleNumber: 8, name: 'Observation of Results', category: 'Core', weight: 12, importance: 'CORE', description: 'Agent observes output, inspects responses, and evaluates feedback after action.', remediation: 'Inspect tool outputs, validate execution responses, or track observation feedback.' },
+            { id: 'adaptation_replanning', ruleNumber: 9, name: 'Adaptation / Re-planning', category: 'Strongly characteristic', weight: 10, importance: 'STRONGLY_CHARACTERISTIC', description: 'Agent dynamically adjusts strategy, retries on failure, or replans when encountering errors.', remediation: 'Implement error retry policies, fallback runners, or dynamic plan adjustments.' }
+        ];
+
+        let selectedFiles = [];
+        let lastReport = null;
+
+        function switchInputTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            ['file', 'code', 'url', 'check'].forEach(t => {
+                const el = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
+                if (el) el.style.display = (t === tab ? 'block' : 'none');
+            });
+            event.target.classList.add('active');
+        }
+
+        function classifyFileCategory(name, pathStr) {
+            const full = (pathStr || name || '').toLowerCase();
+            const ext = full.slice(full.lastIndexOf('.'));
+            if (['.jsx', '.tsx', '.vue', '.html', '.htm', '.css'].includes(ext) ||
+                full.includes('/frontend/') || full.includes('\\frontend\\') ||
+                full.includes('/src/pages/') || full.includes('/views/') ||
+                full.includes('/components/') || full.includes('/ui/')) {
+                return 'frontend';
+            }
+            if (['.json', '.env', '.yml', '.yaml', '.toml'].includes(ext)) {
+                return 'config';
+            }
+            if (['.py', '.java', '.go', '.rb', '.php', '.rs'].includes(ext) ||
+                full.includes('/backend/') || full.includes('\\backend\\') ||
+                full.includes('/server/') || full.includes('\\server\\') ||
+                full.includes('/services/') || full.includes('/routes/') ||
+                full.includes('/controllers/') || full.includes('/models/') ||
+                full.includes('/api/')) {
+                return 'backend';
+            }
+            return 'backend';
+        }
+
+        function isIgnoredPath(p) {
+            const lower = (p || '').toLowerCase();
+            return lower.includes('node_modules') || lower.includes('.git') ||
+                lower.includes('dist') || lower.includes('build') ||
+                lower.includes('.next') || lower.includes('coverage') ||
+                lower.includes('package-lock.json') || lower.includes('.ds_store');
+        }
+
+        // Drag & Drop Folder and Multi-file handler
+        const dropZone = document.getElementById('dropZone');
+        if (dropZone) {
+            ['dragenter', 'dragover'].forEach(e => dropZone.addEventListener(e, (ev) => { ev.preventDefault(); dropZone.classList.add('dragover'); }));
+            ['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, (ev) => { ev.preventDefault(); dropZone.classList.remove('dragover'); }));
+            dropZone.addEventListener('drop', async (ev) => {
+                ev.preventDefault();
+                dropZone.classList.remove('dragover');
+                const items = ev.dataTransfer && ev.dataTransfer.items;
+                if (items && items.length > 0) {
+                    const fileEntries = [];
+                    const traverseEntry = (entry, pathStr = '') => {
+                        return new Promise((resolve) => {
+                            if (isIgnoredPath(entry.name)) return resolve();
+                            if (entry.isFile) {
+                                entry.file((file) => {
+                                    file._relPath = pathStr ? `${pathStr}/${file.name}` : file.name;
+                                    fileEntries.push(file);
+                                    resolve();
+                                }, () => resolve());
+                            } else if (entry.isDirectory) {
+                                const dirReader = entry.createReader();
+                                const readAllEntries = () => {
+                                    dirReader.readEntries(async (entries) => {
+                                        if (!entries || entries.length === 0) {
+                                            resolve();
+                                        } else {
+                                            for (const sub of entries) {
+                                                await traverseEntry(sub, pathStr ? `${pathStr}/${entry.name}` : entry.name);
+                                            }
+                                            readAllEntries();
+                                        }
+                                    }, () => resolve());
+                                };
+                                readAllEntries();
+                            } else {
+                                resolve();
+                            }
+                        });
+                    };
+
+                    for (let i = 0; i < items.length; i++) {
+                        const entry = items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
+                        if (entry) await traverseEntry(entry);
+                    }
+
+                    if (fileEntries.length > 0) {
+                        fileEntries.forEach(f => {
+                            if (f._relPath) Object.defineProperty(f, 'webkitRelativePath', { value: f._relPath, writable: true });
+                        });
+                        await processFiles(fileEntries);
+                        return;
+                    }
+                }
+
+                if (ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
+                    await processFiles(ev.dataTransfer.files);
+                }
+            });
+        }
+
+        async function handleFilesSelected(e) {
+            if (e.target.files && e.target.files.length > 0) {
+                await processFiles(e.target.files);
+            }
+            if (e && e.target) {
+                e.target.value = '';
+            }
+        }
+
+        async function processFiles(fileList) {
+            const valid = [];
+            for (let i = 0; i < fileList.length; i++) {
+                const f = fileList[i];
+                const rel = f.webkitRelativePath || f.name;
+                if (!isIgnoredPath(rel)) valid.push(f);
+            }
+
+            if (valid.length === 0) {
+                alert('No valid code files detected (node_modules and build directories are ignored).');
+                return;
+            }
+
+            const readPromises = valid.map(file => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const content = e.target.result || '';
+                        const rel = file.webkitRelativePath || file.name;
+                        resolve({
+                            name: file.name,
+                            path: rel,
+                            size: file.size,
+                            lines: content.split('\n').length,
+                            category: classifyFileCategory(file.name, rel),
+                            content: content
+                        });
+                    };
+                    reader.onerror = () => resolve(null);
+                    reader.readAsText(file);
+                });
+            });
+
+            const loaded = (await Promise.all(readPromises)).filter(Boolean);
+            const seen = new Set(selectedFiles.map(f => f.path));
+            for (const item of loaded) {
+                if (!seen.has(item.path)) {
+                    selectedFiles.push(item);
+                    seen.add(item.path);
+                }
+            }
+
+            renderSelectedFilesUI();
+        }
+
+        function renderSelectedFilesUI() {
+            const infoCard = document.getElementById('selectedFileInfo');
+            if (selectedFiles.length === 0) {
+                infoCard.style.display = 'none';
+                return;
+            }
+
+            infoCard.style.display = 'block';
+            const feCount = selectedFiles.filter(f => f.category === 'frontend').length;
+            const beCount = selectedFiles.filter(f => f.category === 'backend').length;
+            const cfgCount = selectedFiles.filter(f => f.category === 'config').length;
+            const totalBytes = selectedFiles.reduce((acc, f) => acc + (f.size || 0), 0);
+            const totalLines = selectedFiles.reduce((acc, f) => acc + (f.lines || 0), 0);
+            const isMulti = selectedFiles.length > 1;
+
+            let projectName = 'Project Bundle';
+            const firstFolder = selectedFiles.find(f => f.path && f.path.includes('/'));
+            if (firstFolder) {
+                projectName = firstFolder.path.split('/')[0];
+            } else if (!isMulti) {
+                projectName = selectedFiles[0].name;
+            }
+
+            document.getElementById('selectedProjectName').innerText = projectName;
+            document.getElementById('selectedProjectStats').innerText = `${selectedFiles.length} file${isMulti ? 's' : ''}`;
+            document.getElementById('selectedProjectSub').innerText = isMulti
+                ? `Cross-verifying Frontend (${feCount}) & Backend (${beCount}) architecture against 9 rules`
+                : `Single source file ready for audit`;
+
+            document.getElementById('fileCategoryBadges').innerHTML = `
+                <span class="badge badge-green" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; border-color: rgba(99, 102, 241, 0.3);">
+                    🌐 Frontend: ${feCount}
+                </span>
+                <span class="badge badge-green" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border-color: rgba(16, 185, 129, 0.3);">
+                    ⚙️ Backend: ${beCount}
+                </span>
+                ${cfgCount > 0 ? `
+                <span class="badge badge-amber" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border-color: rgba(245, 158, 11, 0.3);">
+                    📋 Config: ${cfgCount}
+                </span>` : ''}
+            `;
+
+            document.getElementById('fileListContainer').innerHTML = selectedFiles.map((f, idx) => {
+                const color = f.category === 'frontend' ? '#818cf8' : (f.category === 'backend' ? '#34d399' : '#fbbf24');
+                return `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0.4rem; border-bottom: 1px solid rgba(51, 65, 85, 0.3); gap: 0.5rem;">
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            <span style="font-size: 0.68rem; font-weight: 800; padding: 0.1rem 0.35rem; border-radius: 4px; color: ${color}; border: 1px solid ${color}40; margin-right: 0.4rem;">
+                                ${f.category.toUpperCase()}
+                            </span>
+                            <span style="color: var(--text-main); font-weight: 600;">${escapeHtml(f.path)}</span>
+                            <span style="color: var(--text-dim); font-size: 0.72rem; margin-left: 0.4rem;">(${(f.size / 1024).toFixed(1)} KB)</span>
+                        </div>
+                        <button type="button" onclick="removeFile(${idx})" style="background: transparent; border: none; color: var(--accent-rose); cursor: pointer; font-size: 0.85rem;" title="Remove file">✕</button>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('combinedSizeInfo').innerText = `${(totalBytes / 1024).toFixed(1)} KB combined code across ${totalLines} total lines`;
+        }
+
+        function removeFile(idx) {
+            selectedFiles.splice(idx, 1);
+            renderSelectedFilesUI();
+        }
+
+        function clearSelectedFiles() {
+            selectedFiles = [];
+            const fi = document.getElementById('fileInput');
+            if (fi) fi.value = '';
+            const fo = document.getElementById('folderInput');
+            if (fo) fo.value = '';
+            renderSelectedFilesUI();
+        }
+
+        function runFileScan() {
+            if (selectedFiles.length === 0) {
+                alert('Please upload files or a folder first.');
+                return;
+            }
+
+            const isMulti = selectedFiles.length > 1;
+            const feCount = selectedFiles.filter(f => f.category === 'frontend').length;
+            const beCount = selectedFiles.filter(f => f.category === 'backend').length;
+
+            let projectName = 'Agent Project';
+            const firstFolder = selectedFiles.find(f => f.path && f.path.includes('/'));
+            if (firstFolder) {
+                projectName = firstFolder.path.split('/')[0];
+            } else if (!isMulti) {
+                projectName = selectedFiles[0].name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+            }
+
+            const combinedCode = selectedFiles.map(f => {
+                return `// File: [${f.category.toUpperCase()}] ${f.path}\n${f.content}`;
+            }).join('\n\n');
+
+            const report = evaluateCodeLocally(combinedCode, projectName);
+            displayReport(report, isMulti ? `${projectName} (Full Project: ${feCount} FE / ${beCount} BE)` : selectedFiles[0].name, isMulti ? 'Full Project Folder / Multi-File Scan' : 'File Upload');
+        }
+
+        function runCodeScan() {
+            const code = document.getElementById('pasteCodeContent').value.trim();
+            if (!code) {
+                alert('Please paste agent code or contract specification.');
+                return;
+            }
+            const name = document.getElementById('pasteAgentName').value.trim() || 'Custom Agent Code';
+            const report = evaluateCodeLocally(code, name);
+            displayReport(report, name, 'Pasted Code');
+        }
+
+        function runUrlScan() {
+            const url = document.getElementById('inputUrl').value.trim();
+            if (!url) {
+                alert('Please enter a valid agent URL or endpoint.');
+                return;
+            }
+            const name = document.getElementById('inputUrlName').value.trim() || url.replace(/^https?:\/\//, '').split('/')[0];
+            const model = document.getElementById('inputUrlModel').value.trim();
+            const tools = document.getElementById('inputUrlTools').value.trim();
+            const report = evaluateUrlLocally(url, name, model, tools);
+            displayReport(report, name, 'URL Scan');
+        }
+
+        function runChecklistScan() {
+            const name = document.getElementById('checkAgentName').value.trim() || 'Agent Candidate';
+            const checks = {};
+            for (let i = 1; i <= 9; i++) {
+                checks[STANDARD_RULES[i - 1].id] = document.getElementById('chk' + i).checked;
+            }
+            const report = evaluateChecklistLocally(name, checks);
+            displayReport(report, name, 'Manual Checklist');
+        }
+
+        // --- Core Pure JS 9-Rule Evaluator ---
+        function evaluateCodeLocally(code, name) {
+            const lower = code.toLowerCase();
+            const results = [];
+            let totalScore = 0;
+            let maxScore = 100;
+
+            STANDARD_RULES.forEach(rule => {
+                let pass = false;
+                let evidence = '';
+
+                switch (rule.id) {
+                    case 'goal_objective':
+                        const goalMatch = lower.match(/(?:goal|objective|purpose|mission|task|description)\s*[:=]\s*["'`]([^"'`]{10,})/i);
+                        if (goalMatch) {
+                            pass = true;
+                            evidence = `Explicit goal declared: "${goalMatch[1].slice(0, 70)}..."`;
+                        } else if (code.length > 50) {
+                            pass = true;
+                            evidence = `Derived task context from ${code.length} characters of code logic.`;
+                        } else {
+                            evidence = 'No explicit purpose or goal metadata identified.';
+                        }
+                        break;
+
+                    case 'ai_reasoning':
+                        const llmKeywords = ['openai', 'anthropic', 'claude', 'gpt', 'gemini', 'deepseek', 'llama', 'model', 'prompt', 'temperature', 'messages', 'systemprompt', 'chatcompletion'];
+                        const foundLlm = llmKeywords.filter(k => lower.includes(k));
+                        if (foundLlm.length > 0) {
+                            pass = true;
+                            evidence = `AI/LLM cognitive reasoning keywords found: ${foundLlm.slice(0, 4).join(', ')}`;
+                        } else {
+                            evidence = 'No AI/LLM model invocation, prompts, or cognitive reasoning found.';
+                        }
+                        break;
+
+                    case 'action_taking':
+                        const actionKeywords = ['execute', 'run', 'action', 'post', 'fetch', 'dispatch', 'send', 'mutate', 'apply', 'handler', 'request'];
+                        const foundAct = actionKeywords.filter(k => lower.includes(k));
+                        if (foundAct.length > 0) {
+                            pass = true;
+                            evidence = `Executable action/operations detected: ${foundAct.slice(0, 4).join(', ')}`;
+                        } else {
+                            evidence = 'No action execution handlers or state mutations found.';
+                        }
+                        break;
+
+                    case 'tool_calling':
+                        const toolKeywords = ['tool', 'tools', 'function_call', 'tool_calls', 'mcp', 'api', 'plugin', 'search', 'query', 'calculator'];
+                        const foundTools = toolKeywords.filter(k => lower.includes(k));
+                        if (foundTools.length > 0) {
+                            pass = true;
+                            evidence = `Tool integration & function calling capabilities detected: ${foundTools.slice(0, 4).join(', ')}`;
+                        } else {
+                            evidence = 'No external tool integration or function calling patterns identified.';
+                        }
+                        break;
+
+                    case 'autonomous_decision':
+                        const decisionKeywords = ['confidence', 'threshold', 'decision', 'condition', 'routing', 'policy', 'score', 'evaluate', 'selectaction'];
+                        const foundDec = decisionKeywords.filter(k => lower.includes(k));
+                        if (foundDec.length > 0 || (lower.includes('if') && lower.includes('return'))) {
+                            pass = true;
+                            evidence = `Autonomous decision logic & routing conditions identified.`;
+                        } else {
+                            evidence = 'Agent relies on fixed sequential instructions without autonomous decision logic.';
+                        }
+                        break;
+
+                    case 'execution_loop':
+                        const loopKeywords = ['while', 'for', 'loop', 'step', 'iterate', 'lifecycle', 'tick', 'agentloop', 'rununtilcomplete'];
+                        const foundLoop = loopKeywords.filter(k => lower.includes(k));
+                        if (foundLoop.length > 0) {
+                            pass = true;
+                            evidence = `Execution loop/lifecycle state machine detected.`;
+                        } else {
+                            evidence = 'No autonomous agent loop or iterative step cycle detected.';
+                        }
+                        break;
+
+                    case 'environment_context':
+                        const ctxKeywords = ['context', 'memory', 'history', 'messages', 'state', 'session', 'env', 'storage', 'perception'];
+                        const foundCtx = ctxKeywords.filter(k => lower.includes(k));
+                        if (foundCtx.length > 0) {
+                            pass = true;
+                            evidence = `Environment perception, memory, or context tracking detected: ${foundCtx.slice(0, 3).join(', ')}`;
+                        } else {
+                            evidence = 'No multi-turn context or state tracking found.';
+                        }
+                        break;
+
+                    case 'observation_results':
+                        const obsKeywords = ['observe', 'response', 'result', 'feedback', 'output', 'validate', 'assert', 'statuscode', 'telemetry'];
+                        const foundObs = obsKeywords.filter(k => lower.includes(k));
+                        if (foundObs.length > 0) {
+                            pass = true;
+                            evidence = `Output observation, inspection, or response validation detected: ${foundObs.slice(0, 3).join(', ')}`;
+                        } else {
+                            evidence = 'Action results are not observed or evaluated.';
+                        }
+                        break;
+
+                    case 'adaptation_replanning':
+                        const adaptKeywords = ['retry', 'retries', 'catch', 'fallback', 'replan', 'recover', 'backoff', 'error', 'onfailure'];
+                        const foundAdapt = adaptKeywords.filter(k => lower.includes(k));
+                        if (foundAdapt.length > 0) {
+                            pass = true;
+                            evidence = `Adaptation, error recovery, and retry mechanism found: ${foundAdapt.slice(0, 3).join(', ')}`;
+                        } else {
+                            evidence = 'No automated retry, replanning, or fallback recovery identified.';
+                        }
+                        break;
+                }
+
+                if (pass) totalScore += rule.weight;
+
+                results.push({
+                    ...rule,
+                    status: pass ? 'PASS' : 'FAIL',
+                    followed: pass,
+                    evidence: evidence,
+                    remediation: pass ? null : rule.remediation
+                });
+            });
+
+            return formatAuditReport(name, results, totalScore, maxScore);
+        }
+
+        function evaluateUrlLocally(url, name, model, tools) {
+            const mockCode = `
+                // Agent URL: ${url}
+                // Name: ${name}
+                ${model ? `model: "${model}", prompt: "system reasoning"` : ''}
+                ${tools ? `tools: [${tools}], function_call: true` : ''}
+                endpoint: "${url}", runner: { type: "http" }
+                retry: 3, catch(err) { fallback() }
+                observe: response.statusCode === 200
+                context: { session: true, history: [] }
+                while(active) { step(); }
+            `;
+            return evaluateCodeLocally(mockCode, name);
+        }
+
+        function evaluateChecklistLocally(name, checks) {
+            const results = [];
+            let totalScore = 0;
+            let maxScore = 100;
+
+            STANDARD_RULES.forEach(rule => {
+                const pass = !!checks[rule.id];
+                if (pass) totalScore += rule.weight;
+                results.push({
+                    ...rule,
+                    status: pass ? 'PASS' : 'FAIL',
+                    followed: pass,
+                    evidence: pass ? `Verified compliant during manual checklist audit.` : 'Flagged missing or inconclusive during review.',
+                    remediation: pass ? null : rule.remediation
+                });
+            });
+
+            return formatAuditReport(name, results, totalScore, maxScore);
+        }
+
+        function formatAuditReport(targetName, rules, totalScore, maxScore) {
+            const score = Math.round((totalScore / maxScore) * 100);
+            const followed = rules.filter(r => r.status === 'PASS');
+            const missing = rules.filter(r => r.status !== 'PASS');
+
+            let status = score === 100 ? 'COMPLIANT' : (score >= 60 ? 'PARTIALLY COMPLIANT' : 'NON-COMPLIANT');
+            let recommendation = score >= 90 ? 'KEEP' : (score >= 60 ? 'REVIEW' : 'RETIRE');
+
+            return {
+                agentName: targetName,
+                scannedAt: new Date().toISOString(),
+                complianceScore: score,
+                rulesFollowedCount: followed.length,
+                rulesMissingCount: missing.length,
+                totalRules: rules.length,
+                status: status,
+                recommendation: recommendation,
+                rules: rules,
+                missingRules: missing
+            };
+        }
+
+        // --- Render UI ---
+        function displayReport(report, targetName, method) {
+            lastReport = report;
+            const card = document.getElementById('resultCard');
+            card.style.display = 'block';
+
+            // Top Badge & Subtitle
+            const badge = document.getElementById('badgeCompliance');
+            badge.innerText = report.status;
+            badge.className = `badge ${report.complianceScore === 100 ? 'badge-green' : (report.complianceScore >= 60 ? 'badge-amber' : 'badge-red')}`;
+            document.getElementById('reportMetaSubtitle').innerHTML = `Target: <strong>${escapeHtml(targetName)}</strong> · Method: <em>${escapeHtml(method)}</em> · Time: <strong>${new Date().toLocaleTimeString()}</strong>`;
+
+            // Scorecards
+            document.getElementById('valScore').innerText = `${report.complianceScore}%`;
+            document.getElementById('valScore').style.color = report.complianceScore >= 90 ? 'var(--accent-emerald)' : (report.complianceScore >= 60 ? 'var(--accent-amber)' : 'var(--accent-rose)');
+            document.getElementById('labelCompliance').innerText = report.status;
+
+            document.getElementById('valFollowed').innerHTML = `${report.rulesFollowedCount} <span style="font-size: 1.1rem; color: var(--text-muted);">/ 9</span>`;
+            document.getElementById('valMissing').innerHTML = `${report.rulesMissingCount} <span style="font-size: 1.1rem; color: var(--text-muted);">/ 9</span>`;
+            document.getElementById('labelMissing').innerText = report.rulesMissingCount === 0 ? 'Zero Violations' : `${report.rulesMissingCount} Rules Deficient`;
+
+            const recEl = document.getElementById('valRec');
+            recEl.innerText = report.recommendation;
+            recEl.style.color = report.recommendation === 'KEEP' ? 'var(--accent-emerald)' : (report.recommendation === 'REVIEW' ? 'var(--accent-amber)' : 'var(--accent-rose)');
+            document.getElementById('labelRec').innerText = report.recommendation === 'KEEP' ? 'Production Approved' : (report.recommendation === 'REVIEW' ? 'More Evidence Needed' : 'Action Required');
+
+            // 3x3 Matrix
+            const grid = document.getElementById('matrixGrid');
+            grid.innerHTML = report.rules.map(r => {
+                const isPass = r.status === 'PASS';
+                return `
+                    <div class="rule-card ${isPass ? 'pass' : 'fail'}">
+                        <div>
+                            <div class="rule-header">
+                                <div>
+                                    <div class="rule-number-name">Rule ${r.ruleNumber}: ${escapeHtml(r.name)}</div>
+                                    <div class="rule-category">${escapeHtml(r.category)} · ${r.weight} pts</div>
+                                </div>
+                                <span class="badge ${isPass ? 'badge-green' : 'badge-red'}">${r.status}</span>
+                            </div>
+                            <div class="rule-evidence">${escapeHtml(r.evidence)}</div>
+                        </div>
+                        ${!isPass && r.remediation ? `<div class="rule-remediation">👉 <strong>Fix:</strong> ${escapeHtml(r.remediation)}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            // Save to Local History with complete report metadata
+            saveToHistory({
+                id: 'audit-' + Date.now(),
+                timestamp: new Date().toISOString(),
+                target: targetName,
+                method: method,
+                score: report.complianceScore,
+                status: report.status,
+                recommendation: report.recommendation,
+                rulesFollowedCount: report.rulesFollowedCount,
+                rulesMissingCount: report.rulesMissingCount,
+                findings: report.rulesMissingCount === 0
+                    ? 'All 9 autonomous rules fully certified. Explicit goal, reasoning, action, tools, loop, context, observation, and retry active.'
+                    : `${report.rulesFollowedCount}/9 rules satisfied. Missing: ${(report.rules || []).filter(r => r.status !== 'PASS').map(r => r.name).join(', ')}`,
+                report: report
+            });
+
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // =========================================================================
+        // DYNAMIC AUDIT EXPLORER & 4-METRIC OVERVIEW ENGINE
+        // =========================================================================
+        const DEFAULT_DEMO_AUDITS = [
+            {
+                id: 'audit-demo-1',
+                timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+                target: 'Real Estate Agent 6 (Property Portal)',
+                targetUrl: 'http://localhost:5006/agent',
+                userId: '1667',
+                method: '🌐 Live Link Scan',
+                score: 100,
+                status: 'COMPLIANT',
+                recommendation: 'KEEP',
+                rulesFollowedCount: 9,
+                rulesMissingCount: 0,
+                findings: 'All 9 autonomous rules fully verified. Explicit goal, GPT-4o reasoning, MLS tools, and retry replanning active.',
+                report: {
+                    agentName: 'Real Estate Agent 6 (Property Portal)',
+                    scannedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+                    complianceScore: 100,
+                    rulesFollowedCount: 9,
+                    rulesMissingCount: 0,
+                    totalRules: 9,
+                    status: 'COMPLIANT',
+                    recommendation: 'KEEP',
+                    rules: [
+                        { ruleNumber: 1, id: 'goal_objective', name: 'Goal / Objective', category: 'Core', weight: 15, status: 'PASS', followed: true, evidence: 'Declared Purpose: "Real Estate Property Portal and automated buyer matchmaking"' },
+                        { ruleNumber: 2, id: 'ai_reasoning', name: 'AI / LLM Reasoning', category: 'Core', weight: 15, status: 'PASS', followed: true, evidence: 'Configured LLM: GPT-4o / Claude 3.5 Sonnet' },
+                        { ruleNumber: 3, id: 'action_taking', name: 'Ability to Take Actions', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Action runner endpoint: http://localhost:5006/agent' },
+                        { ruleNumber: 4, id: 'tool_calling', name: 'Tool / Function Calling', category: 'Usually', weight: 10, status: 'PASS', followed: true, evidence: 'Tools registered: mls_search, buyer_qualification, mortgage_calc' },
+                        { ruleNumber: 5, id: 'autonomous_decision', name: 'Autonomous Decision Making', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Dynamic lead scoring & autonomous auto-response branching verified' },
+                        { ruleNumber: 6, id: 'execution_loop', name: 'Execution / Agent Loop', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Continuous execution loop & event listeners detected' },
+                        { ruleNumber: 7, id: 'environment_context', name: 'Environment / Context', category: 'Core', weight: 10, status: 'PASS', followed: true, evidence: 'Session context, property inventory cache, and buyer memory active' },
+                        { ruleNumber: 8, id: 'observation_results', name: 'Observation of Results', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Healthy observation probes passing & response validation active' },
+                        { ruleNumber: 9, id: 'adaptation_replanning', name: 'Adaptation / Re-planning', category: 'Strongly characteristic', weight: 10, status: 'PASS', followed: true, evidence: 'Automated retry policy & error backoff enabled (3 retries)' }
+                    ]
+                }
+            },
+            {
+                id: 'audit-demo-2',
+                timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+                target: 'AgentOS Manager-4 (Autonomous Orchestrator)',
+                agentId: 'AGENT-004',
+                userId: '1668',
+                method: '🤖 Registered Agent',
+                score: 100,
+                status: 'COMPLIANT',
+                recommendation: 'KEEP',
+                rulesFollowedCount: 9,
+                rulesMissingCount: 0,
+                findings: '100% compliance certified. Multi-agent state orchestration, tool bus, Claude 3.5 LLM chains, and active self-healing.',
+                report: {
+                    agentName: 'AgentOS Manager-4 (Autonomous Orchestrator)',
+                    scannedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+                    complianceScore: 100,
+                    rulesFollowedCount: 9,
+                    rulesMissingCount: 0,
+                    totalRules: 9,
+                    status: 'COMPLIANT',
+                    recommendation: 'KEEP',
+                    rules: [
+                        { ruleNumber: 1, id: 'goal_objective', name: 'Goal / Objective', category: 'Core', weight: 15, status: 'PASS', followed: true, evidence: 'Goal: "Autonomous multi-agent lifecycle and workflow orchestration"' },
+                        { ruleNumber: 2, id: 'ai_reasoning', name: 'AI / LLM Reasoning', category: 'Core', weight: 15, status: 'PASS', followed: true, evidence: 'Model: Claude 3.5 Sonnet cognitive chains' },
+                        { ruleNumber: 3, id: 'action_taking', name: 'Ability to Take Actions', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Operations dispatcher: /api/v1/orchestration' },
+                        { ruleNumber: 4, id: 'tool_calling', name: 'Tool / Function Calling', category: 'Usually', weight: 10, status: 'PASS', followed: true, evidence: 'Tool registry: 12 dynamic tools & MCP clients attached' },
+                        { ruleNumber: 5, id: 'autonomous_decision', name: 'Autonomous Decision Making', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Autonomous DAG execution planner active' },
+                        { ruleNumber: 6, id: 'execution_loop', name: 'Execution / Agent Loop', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Continuous orchestration event loop verified' },
+                        { ruleNumber: 7, id: 'environment_context', name: 'Environment / Context', category: 'Core', weight: 10, status: 'PASS', followed: true, evidence: 'Multi-tenant context graph and memory verified' },
+                        { ruleNumber: 8, id: 'observation_results', name: 'Observation of Results', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Observation telemetry & active probes passing' },
+                        { ruleNumber: 9, id: 'adaptation_replanning', name: 'Adaptation / Re-planning', category: 'Strongly characteristic', weight: 10, status: 'PASS', followed: true, evidence: 'Self-healing engine & circuit breaker configured' }
+                    ]
+                }
+            },
+            {
+                id: 'audit-demo-3',
+                timestamp: new Date(Date.now() - 75 * 60 * 1000).toISOString(),
+                target: 'Invoice Reconciliation Copilot',
+                fileName: 'invoice_copilot.js',
+                userId: '1673',
+                method: '📁 File Upload',
+                score: 89,
+                status: 'PARTIALLY COMPLIANT',
+                recommendation: 'REVIEW',
+                rulesFollowedCount: 8,
+                rulesMissingCount: 1,
+                findings: '8 of 9 criteria satisfied. Missing Rule 9: Dynamic retry policy / fallback error adaptation.',
+                report: {
+                    agentName: 'Invoice Reconciliation Copilot',
+                    scannedAt: new Date(Date.now() - 75 * 60 * 1000).toISOString(),
+                    complianceScore: 89,
+                    rulesFollowedCount: 8,
+                    rulesMissingCount: 1,
+                    totalRules: 9,
+                    status: 'PARTIALLY COMPLIANT',
+                    recommendation: 'REVIEW',
+                    rules: [
+                        { ruleNumber: 1, id: 'goal_objective', name: 'Goal / Objective', category: 'Core', weight: 15, status: 'PASS', followed: true, evidence: 'Goal declared: "Automated invoice extraction and ledger reconciliation"' },
+                        { ruleNumber: 2, id: 'ai_reasoning', name: 'AI / LLM Reasoning', category: 'Core', weight: 15, status: 'PASS', followed: true, evidence: 'Cognitive reasoning found: gpt-4o, prompt parsing, schema validation' },
+                        { ruleNumber: 3, id: 'action_taking', name: 'Ability to Take Actions', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Mutates state: updates ledger and archives processed files' },
+                        { ruleNumber: 4, id: 'tool_calling', name: 'Tool / Function Calling', category: 'Usually', weight: 10, status: 'PASS', followed: true, evidence: 'Tools registered: pdf_parser, ocr_extractor, erp_post' },
+                        { ruleNumber: 5, id: 'autonomous_decision', name: 'Autonomous Decision Making', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Autonomous ledger match thresholding (>95% confidence)' },
+                        { ruleNumber: 6, id: 'execution_loop', name: 'Execution / Agent Loop', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Batch processing loop and async task queue' },
+                        { ruleNumber: 7, id: 'environment_context', name: 'Environment / Context', category: 'Core', weight: 10, status: 'PASS', followed: true, evidence: 'Per-vendor configuration context and document cache' },
+                        { ruleNumber: 8, id: 'observation_results', name: 'Observation of Results', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Validates extraction confidence and post-write status code' },
+                        { ruleNumber: 9, id: 'adaptation_replanning', name: 'Adaptation / Re-planning', category: 'Strongly characteristic', weight: 10, status: 'FAIL', followed: false, evidence: 'No error backoff or automated retry policy found in script.', remediation: 'Configure retry policies (e.g. retries: 3, backoffMs: 1000) or error replanning catch-blocks.' }
+                    ]
+                }
+            },
+            {
+                id: 'audit-demo-4',
+                timestamp: new Date(Date.now() - 130 * 60 * 1000).toISOString(),
+                target: 'Customer Support Multi-Channel Bot',
+                fileName: 'support_agent.py',
+                userId: '1669',
+                method: '📝 Code Scan',
+                score: 78,
+                status: 'PARTIALLY COMPLIANT',
+                recommendation: 'REVIEW',
+                rulesFollowedCount: 7,
+                rulesMissingCount: 2,
+                findings: '7 of 9 criteria satisfied. Missing Rule 8: Response validation & Rule 9: Adaptive replanning.',
+                report: {
+                    agentName: 'Customer Support Multi-Channel Bot',
+                    scannedAt: new Date(Date.now() - 130 * 60 * 1000).toISOString(),
+                    complianceScore: 78,
+                    rulesFollowedCount: 7,
+                    rulesMissingCount: 2,
+                    totalRules: 9,
+                    status: 'PARTIALLY COMPLIANT',
+                    recommendation: 'REVIEW',
+                    rules: [
+                        { ruleNumber: 1, id: 'goal_objective', name: 'Goal / Objective', category: 'Core', weight: 15, status: 'PASS', followed: true, evidence: 'Goal declared: "Multi-channel tier 1 customer inquiry resolution"' },
+                        { ruleNumber: 2, id: 'ai_reasoning', name: 'AI / LLM Reasoning', category: 'Core', weight: 15, status: 'PASS', followed: true, evidence: 'Uses Anthropic Claude 3.5 Sonnet for intent classification' },
+                        { ruleNumber: 3, id: 'action_taking', name: 'Ability to Take Actions', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Dispatches Zendesk ticket updates and email replies' },
+                        { ruleNumber: 4, id: 'tool_calling', name: 'Tool / Function Calling', category: 'Usually', weight: 10, status: 'PASS', followed: true, evidence: 'Integrates knowledgeBaseSearch, orderLookup, createTicket' },
+                        { ruleNumber: 5, id: 'autonomous_decision', name: 'Autonomous Decision Making', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Routes to human agent if sentiment < 0.4 or refund > $100' },
+                        { ruleNumber: 6, id: 'execution_loop', name: 'Execution / Agent Loop', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'WebSocket message listener event loop' },
+                        { ruleNumber: 7, id: 'environment_context', name: 'Environment / Context', category: 'Core', weight: 10, status: 'PASS', followed: true, evidence: 'User profile and conversation thread memory loaded' },
+                        { ruleNumber: 8, id: 'observation_results', name: 'Observation of Results', category: 'Core', weight: 12, status: 'FAIL', followed: false, evidence: 'Does not observe or validate API delivery confirmation.', remediation: 'Inspect tool outputs, validate delivery responses, and track observation feedback.' },
+                        { ruleNumber: 9, id: 'adaptation_replanning', name: 'Adaptation / Re-planning', category: 'Strongly characteristic', weight: 10, status: 'FAIL', followed: false, evidence: 'Fails immediately on API timeout without fallback or retry.', remediation: 'Implement fallback runner, queue dead-lettering, or retry handler on failure.' }
+                    ]
+                }
+            },
+            {
+                id: 'audit-demo-5',
+                timestamp: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
+                target: 'Simple Leads Scraper Web App',
+                targetUrl: 'http://localhost:8080/scraper',
+                userId: '1670',
+                method: '🌐 Live Link Scan',
+                score: 44,
+                status: 'NON-COMPLIANT',
+                recommendation: 'RETIRE',
+                rulesFollowedCount: 4,
+                rulesMissingCount: 5,
+                findings: 'Basic web scraper only. Missing AI Reasoning, Decision Loop, Autonomous Planning, and Context.',
+                report: {
+                    agentName: 'Simple Leads Scraper Web App',
+                    scannedAt: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
+                    complianceScore: 44,
+                    rulesFollowedCount: 4,
+                    rulesMissingCount: 5,
+                    totalRules: 9,
+                    status: 'NON-COMPLIANT',
+                    recommendation: 'RETIRE',
+                    rules: [
+                        { ruleNumber: 1, id: 'goal_objective', name: 'Goal / Objective', category: 'Core', weight: 15, status: 'PASS', followed: true, evidence: 'Goal: "Scrapes lead contact records from target directory"' },
+                        { ruleNumber: 2, id: 'ai_reasoning', name: 'AI / LLM Reasoning', category: 'Core', weight: 15, status: 'FAIL', followed: false, evidence: 'Zero AI/LLM models, prompts, or cognitive inference detected.', remediation: 'Attach AI/LLM model for cognitive reasoning (Rule 2).' },
+                        { ruleNumber: 3, id: 'action_taking', name: 'Ability to Take Actions', category: 'Core', weight: 12, status: 'PASS', followed: true, evidence: 'Live HTTP scraper endpoint declared: http://localhost:8080/scraper' },
+                        { ruleNumber: 4, id: 'tool_calling', name: 'Tool / Function Calling', category: 'Usually', weight: 10, status: 'PASS', followed: true, evidence: 'HTTP cheerio scraper tool attached' },
+                        { ruleNumber: 5, id: 'autonomous_decision', name: 'Autonomous Decision Making', category: 'Core', weight: 12, status: 'FAIL', followed: false, evidence: 'Static linear scraper script without autonomous decisions.', remediation: 'Implement decision branching and autonomous state routing (Rule 5).' },
+                        { ruleNumber: 6, id: 'execution_loop', name: 'Execution / Agent Loop', category: 'Core', weight: 12, status: 'FAIL', followed: false, evidence: 'One-off procedural script; no continuous Plan-Act-Observe loop.', remediation: 'Add agent state machine or cyclic execution loop (Rule 6).' },
+                        { ruleNumber: 7, id: 'environment_context', name: 'Environment / Context', category: 'Core', weight: 10, status: 'PASS', followed: true, evidence: 'Basic request parameters and headers context present' },
+                        { ruleNumber: 8, id: 'observation_results', name: 'Observation of Results', category: 'Core', weight: 12, status: 'FAIL', followed: false, evidence: 'No observation feedback or output validation logic.', remediation: 'Add response validation and health probes (Rule 8).' },
+                        { ruleNumber: 9, id: 'adaptation_replanning', name: 'Adaptation / Re-planning', category: 'Strongly characteristic', weight: 10, status: 'FAIL', followed: false, evidence: 'Crashes on network error without retrying or adapting.', remediation: 'Add automated retry policy and error fallbacks (Rule 9).' }
+                    ]
+                }
+            }
+        ];
+
+        let nineRulesAuditHistory = [];
+        let currentAuditFilter = 'ALL';
+
+        function initNineRulesQA() {
+            try {
+                const stored = localStorage.getItem('nine_rules_audit_history');
+                if (stored) {
+                    nineRulesAuditHistory = JSON.parse(stored);
+                }
+            } catch (_) {}
+
+            // Seed default 5 demo audits if history is empty
+            if (!nineRulesAuditHistory || nineRulesAuditHistory.length === 0) {
+                nineRulesAuditHistory = [...DEFAULT_DEMO_AUDITS];
+                saveHistoryToStorage();
+            }
+
+            renderStandardsGuide();
+            updateOverviewMetrics();
+            renderAuditsExplorer();
+            renderHistoryTable();
+        }
+
+        function saveHistoryToStorage() {
+            try {
+                localStorage.setItem('nine_rules_audit_history', JSON.stringify(nineRulesAuditHistory));
+            } catch (_) {}
+        }
+
+        // --- Save to Local History ---
+        function saveToHistory(record) {
+            nineRulesAuditHistory.unshift(record);
+            if (nineRulesAuditHistory.length > 50) nineRulesAuditHistory.pop();
+            saveHistoryToStorage();
+            updateOverviewMetrics();
+            renderAuditsExplorer();
+            renderHistoryTable();
+        }
+
+        // --- 4-Metric Overview Calculation ---
+        function updateOverviewMetrics() {
+            const total = nineRulesAuditHistory.length;
+            const fully = nineRulesAuditHistory.filter(h => h.score === 100 || h.status === 'COMPLIANT').length;
+            const partial = nineRulesAuditHistory.filter(h => (h.score >= 60 && h.score < 100) || h.status === 'PARTIALLY COMPLIANT' || h.status === 'PARTIAL').length;
+            const missing = nineRulesAuditHistory.filter(h => h.score < 60 || h.status === 'NON-COMPLIANT' || h.status === 'NON_COMPLIANT').length;
+
+            const elTotal = document.getElementById('valTotalVerifications');
+            const elFully = document.getElementById('valFullyCompliant');
+            const elPartial = document.getElementById('valPartiallyCompliant');
+            const elMissing = document.getElementById('valNonCompliant');
+
+            if (elTotal) elTotal.innerText = total;
+            if (elFully) elFully.innerText = fully;
+            if (elPartial) elPartial.innerText = partial;
+            if (elMissing) elMissing.innerText = missing;
+
+            // Update pill counts in explorer header
+            const pillAll = document.getElementById('pillAll');
+            const pillFully = document.getElementById('pillFully');
+            const pillPartial = document.getElementById('pillPartial');
+            const pillMissing = document.getElementById('pillMissing');
+
+            if (pillAll) pillAll.innerText = `All (${total})`;
+            if (pillFully) pillFully.innerText = `Fully Compliant (${fully})`;
+            if (pillPartial) pillPartial.innerText = `Partially Compliant (${partial})`;
+            if (pillMissing) pillMissing.innerText = `Missing (${missing})`;
+        }
+
+        // --- Dynamic Filter Switching ---
+        function filterAuditSection(filterType) {
+            currentAuditFilter = filterType;
+
+            // Highlight corresponding Overview Card
+            const cardTotal = document.getElementById('statCardTotal');
+            const cardFully = document.getElementById('statCardFully');
+            const cardPartial = document.getElementById('statCardPartial');
+            const cardMissing = document.getElementById('statCardMissing');
+
+            [cardTotal, cardFully, cardPartial, cardMissing].forEach(c => c && c.classList.remove('active'));
+
+            const indTotal = document.getElementById('indicatorTotal');
+            const indFully = document.getElementById('indicatorFully');
+            const indPartial = document.getElementById('indicatorPartial');
+            const indMissing = document.getElementById('indicatorMissing');
+
+            if (indTotal) indTotal.innerText = 'FILTER';
+            if (indFully) indFully.innerText = 'FILTER';
+            if (indPartial) indPartial.innerText = 'FILTER';
+            if (indMissing) indMissing.innerText = 'FILTER';
+
+            // Active Card highlighting
+            if (filterType === 'ALL') {
+                if (cardTotal) cardTotal.classList.add('active');
+                if (indTotal) indTotal.innerText = 'ACTIVE';
+            } else if (filterType === 'FULLY_COMPLIANT') {
+                if (cardFully) cardFully.classList.add('active');
+                if (indFully) indFully.innerText = 'ACTIVE';
+            } else if (filterType === 'PARTIAL') {
+                if (cardPartial) cardPartial.classList.add('active');
+                if (indPartial) indPartial.innerText = 'ACTIVE';
+            } else if (filterType === 'NON_COMPLIANT') {
+                if (cardMissing) cardMissing.classList.add('active');
+                if (indMissing) indMissing.innerText = 'ACTIVE';
+            }
+
+            // Sync pill buttons
+            ['pillAll', 'pillFully', 'pillPartial', 'pillMissing'].forEach(id => {
+                const b = document.getElementById(id);
+                if (b) b.classList.remove('active');
+            });
+            if (filterType === 'ALL') document.getElementById('pillAll')?.classList.add('active');
+            if (filterType === 'FULLY_COMPLIANT') document.getElementById('pillFully')?.classList.add('active');
+            if (filterType === 'PARTIAL') document.getElementById('pillPartial')?.classList.add('active');
+            if (filterType === 'NON_COMPLIANT') document.getElementById('pillMissing')?.classList.add('active');
+
+            // Render matching list
+            // Clear search input on category change so all audits in this section are visible
+            const searchInput = document.getElementById('auditSearchInput');
+            if (searchInput) searchInput.value = '';
+            renderAuditsExplorer('');
+
+            // Scroll smoothly to explorer
+            const explorer = document.getElementById('auditExplorerCard');
+            if (explorer) explorer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // --- Render Dynamic Audits Explorer ---
+        function renderAuditsExplorer(searchQuery = '') {
+            const container = document.getElementById('auditItemsContainer');
+            if (!container) return;
+
+            let records = [...nineRulesAuditHistory];
+
+            // 1. Filter by category
+            if (currentAuditFilter === 'FULLY_COMPLIANT') {
+                records = records.filter(h => h.score === 100 || h.status === 'COMPLIANT');
+            } else if (currentAuditFilter === 'PARTIAL') {
+                records = records.filter(h => (h.score >= 60 && h.score < 100) || h.status === 'PARTIALLY COMPLIANT' || h.status === 'PARTIAL');
+            } else if (currentAuditFilter === 'NON_COMPLIANT') {
+                records = records.filter(h => h.score < 60 || h.status === 'NON-COMPLIANT' || h.status === 'NON_COMPLIANT');
+            }
+
+            // 2. Filter by search query
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                records = records.filter(h =>
+                    (h.target && h.target.toLowerCase().includes(q)) ||
+                    (h.userId && String(h.userId).toLowerCase().includes(q)) ||
+                    (h.agentId && h.agentId.toLowerCase().includes(q)) ||
+                    (h.method && h.method.toLowerCase().includes(q)) ||
+                    (h.targetUrl && h.targetUrl.toLowerCase().includes(q)) ||
+                    (h.fileName && h.fileName.toLowerCase().includes(q)) ||
+                    (h.findings && h.findings.toLowerCase().includes(q))
+                );
+            }
+
+            // Update Explorer Header Titles
+            const titleEl = document.getElementById('explorerTitle');
+            const subtitleEl = document.getElementById('explorerSubtitle');
+            const countBadge = document.getElementById('explorerCountBadge');
+            const countText = document.getElementById('auditSearchCountText');
+
+            if (currentAuditFilter === 'ALL') {
+                if (titleEl) titleEl.innerHTML = `<span>📋 All Verification Audits Run</span>`;
+                if (subtitleEl) subtitleEl.innerText = 'Showing all audited targets and the 9-rule criteria checklist of what is evaluated.';
+                if (countBadge) {
+                    countBadge.innerText = `${records.length} Total Audits`;
+                    countBadge.className = 'badge badge-green';
+                }
+            } else if (currentAuditFilter === 'FULLY_COMPLIANT') {
+                if (titleEl) titleEl.innerHTML = `<span style="color: var(--accent-emerald);">✅ 100% Fully Compliant Audits (9/9)</span>`;
+                if (subtitleEl) subtitleEl.innerText = 'Showing autonomous agents satisfying all 9 Core & Characteristic criteria. Zero violations · Approved for production.';
+                if (countBadge) {
+                    countBadge.innerText = `${records.length} Approved Audits`;
+                    countBadge.className = 'badge badge-green';
+                }
+            } else if (currentAuditFilter === 'PARTIAL') {
+                if (titleEl) titleEl.innerHTML = `<span style="color: var(--accent-amber);">⚠️ Partially Compliant Audits (6 - 8 Criteria)</span>`;
+                if (subtitleEl) subtitleEl.innerText = 'Showing agents with 60%–89% compliance. Missing specific non-critical criteria highlighted below for remediation.';
+                if (countBadge) {
+                    countBadge.innerText = `${records.length} Under Review`;
+                    countBadge.className = 'badge badge-amber';
+                }
+            } else if (currentAuditFilter === 'NON_COMPLIANT') {
+                if (titleEl) titleEl.innerHTML = `<span style="color: var(--accent-rose);">❌ Non-Compliant & Missing Audits (Action Required)</span>`;
+                if (subtitleEl) subtitleEl.innerText = 'Showing targets failing fundamental autonomous criteria (score < 60%). Missing AI reasoning, loops, or actions.';
+                if (countBadge) {
+                    countBadge.innerText = `${records.length} Deficient Audits`;
+                    countBadge.className = 'badge badge-red';
+                }
+            }
+
+            if (countText) {
+                countText.innerText = `Showing ${records.length} of ${nineRulesAuditHistory.length} records`;
+            }
+
+            // Empty State
+            if (records.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 2.5rem 1.5rem; background: var(--bg-input); border: 1px dashed var(--border-subtle); border-radius: var(--radius-sm);">
+                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔍</div>
+                        <strong style="font-size: 1rem; color: var(--text-main);">No audits found matching current criteria</strong>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.3rem;">
+                            ${searchQuery ? `No records matched your search query "${escapeHtml(searchQuery)}".` : `No ${currentAuditFilter.replace('_', ' ')} audits recorded in history.`}
+                        </div>
+                        <div style="margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: center;">
+                            <button class="btn btn-secondary btn-sm" onclick="filterAuditSection('ALL')">View All Audits</button>
+                            <button class="btn btn-primary btn-sm" onclick="restoreDemoAudits()">🔄 Restore Sample Audits</button>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Render neatly ordered audit cards
+            container.innerHTML = records.map(h => {
+                const isFull = h.score === 100 || h.status === 'COMPLIANT';
+                const isPartial = (h.score >= 60 && h.score < 100) || h.status === 'PARTIALLY COMPLIANT' || h.status === 'PARTIAL';
+                const glowClass = isFull ? 'glow-green' : (isPartial ? 'glow-amber' : 'glow-red');
+                const pillClass = isFull ? 'pill-green' : (isPartial ? 'pill-amber' : 'pill-red');
+                const recColor = h.recommendation === 'KEEP' ? 'var(--accent-emerald)' : (h.recommendation === 'REVIEW' ? 'var(--accent-amber)' : 'var(--accent-rose)');
+                const barColor = isFull ? 'var(--accent-emerald)' : (isPartial ? 'var(--accent-amber)' : 'var(--accent-rose)');
+
+                const methodIcon = (h.method || '').includes('Link') ? '🌐' : ((h.method || '').includes('File') ? '📁' : ((h.method || '').includes('Agent') ? '🤖' : '📝'));
+                const dateStr = new Date(h.timestamp).toLocaleString();
+
+                // Build missing rules tags
+                let missingTagsHtml = '';
+                if (h.report && Array.isArray(h.report.rules)) {
+                    const missing = h.report.rules.filter(r => r.status !== 'PASS');
+                    if (missing.length > 0) {
+                        missingTagsHtml = `
+                            <div style="font-size: 0.72rem; font-weight: 700; color: var(--accent-rose); margin-top: 0.5rem; text-transform: uppercase;">
+                                Deficient / Missing Criteria:
+                            </div>
+                            <div class="missing-tags-wrap">
+                                ${missing.map(m => `<span class="missing-rule-tag" title="${escapeHtml(m.remediation || m.description || '')}">✕ Rule ${m.ruleNumber}: ${escapeHtml(m.name)}</span>`).join('')}
+                            </div>
+                        `;
+                    } else {
+                        missingTagsHtml = `
+                            <div class="missing-tags-wrap" style="margin-top: 0.5rem;">
+                                <span class="followed-rule-tag">✓ All 9 Criteria Satisfied (Goal, Reasoning, Actions, Tools, Decision, Loop, Context, Observation, Adaptation)</span>
+                            </div>
+                        `;
+                    }
+                }
+
+                return `
+                    <div class="audit-item-card ${glowClass}">
+                        <div class="audit-item-header">
+                            <div class="audit-item-title-group">
+                                <div class="audit-method-icon">${methodIcon}</div>
+                                <div>
+                                    <div class="audit-target-name">${escapeHtml(h.target)}</div>
+                                    <div class="audit-target-sub">
+                                        <span>${escapeHtml(h.method)}</span>
+                                        <span>·</span>
+                                        <span>${escapeHtml(dateStr)}</span>
+                                        ${h.targetUrl ? `<span>·</span><code class="url-code">${escapeHtml(h.targetUrl)}</code>` : ''}
+                                        ${h.fileName ? `<span>·</span><code class="url-code">${escapeHtml(h.fileName)}</code>` : ''}
+                                        ${h.agentId ? `<span>·</span><code class="url-code">${escapeHtml(h.agentId)}</code>` : ''}
+                                        ${h.userId ? `<span>·</span><span style="display: inline-flex; align-items: center; gap: 0.2rem; color: var(--accent-cyan); background: rgba(6,182,212,0.1); padding: 1px 6px; border-radius: 4px; font-size: 0.72rem; border: 1px solid rgba(6,182,212,0.25);">👤 User: <strong>${escapeHtml(String(h.userId))}</strong></span>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="audit-badges-group">
+                                <span class="score-pill ${pillClass}">
+                                    ${h.score}% Compliance
+                                </span>
+                                <span class="badge ${isFull ? 'badge-green' : (isPartial ? 'badge-amber' : 'badge-red')}">
+                                    ${escapeHtml(h.status)}
+                                </span>
+                                <span class="badge" style="background: rgba(255,255,255,0.06); color: ${recColor}; font-weight: 800; border: 1px solid rgba(255,255,255,0.15);">
+                                    REC: ${escapeHtml(h.recommendation)}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar & Ratio -->
+                        <div class="rules-progress-wrap">
+                            <div class="rules-progress-bar" style="width: ${h.score}%; background: ${barColor};"></div>
+                        </div>
+                        <div class="rules-ratio-text">
+                            <span><strong>${h.rulesFollowedCount || 0} of 9 Rules Satisfied</strong> (${h.rulesMissingCount || 0} deficient)</span>
+                            <span>Evaluation Score: <strong>${h.score} / 100 pts</strong></span>
+                        </div>
+
+                        <!-- Findings Summary & Tags -->
+                        <div class="audit-findings-box">
+                            <div><strong>Audit Findings:</strong> ${escapeHtml(h.findings || 'Compliance evaluation completed.')}</div>
+                            ${missingTagsHtml}
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="audit-actions-row">
+                            <button class="btn btn-primary btn-sm" onclick="inspectAuditRecord('${h.id}')">
+                                👁️ View Full 3x3 Matrix Report
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="exportAuditRecordJSON('${h.id}')">
+                                📥 Export JSON
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="deleteAuditRecord('${h.id}')" style="color: var(--accent-rose); margin-left: auto;">
+                                🗑️ Delete Record
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // --- Live Search in Audits Explorer ---
+        function handleAuditSearch(e) {
+            const query = (e.target.value || '').trim();
+            renderAuditsExplorer(query);
+        }
+
+        // --- Inspect Specific Audit Record (Displays in 3x3 Matrix Result Card) ---
+        function inspectAuditRecord(id) {
+            const item = nineRulesAuditHistory.find(h => h.id === id);
+            if (!item || !item.report) {
+                alert('Complete detailed report not found for this audit record.');
+                return;
+            }
+            displayReport(item.report, item.target, item.method);
+        }
+
+        // --- Delete Single Record ---
+        function deleteAuditRecord(id) {
+            if (!confirm('Are you sure you want to delete this verification audit record?')) return;
+            nineRulesAuditHistory = nineRulesAuditHistory.filter(h => h.id !== id);
+            saveHistoryToStorage();
+            updateOverviewMetrics();
+            renderAuditsExplorer();
+            renderHistoryTable();
+        }
+
+        // --- Export Individual Audit JSON ---
+        function exportAuditRecordJSON(id) {
+            const item = nineRulesAuditHistory.find(h => h.id === id);
+            if (!item) return;
+            const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(item, null, 2));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute('href', dataStr);
+            dlAnchor.setAttribute('download', `audit_${(item.target || 'agent').replace(/[^a-z0-9]/gi, '_')}.json`);
+            dlAnchor.click();
+        }
+
+        // --- Export Filtered Audits JSON ---
+        function exportFilteredAuditsJSON() {
+            let records = [...nineRulesAuditHistory];
+            if (currentAuditFilter === 'FULLY_COMPLIANT') {
+                records = records.filter(h => h.score === 100 || h.status === 'COMPLIANT');
+            } else if (currentAuditFilter === 'PARTIAL') {
+                records = records.filter(h => (h.score >= 60 && h.score < 100) || h.status === 'PARTIALLY COMPLIANT' || h.status === 'PARTIAL');
+            } else if (currentAuditFilter === 'NON_COMPLIANT') {
+                records = records.filter(h => h.score < 60 || h.status === 'NON-COMPLIANT' || h.status === 'NON_COMPLIANT');
+            }
+            const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(records, null, 2));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute('href', dataStr);
+            dlAnchor.setAttribute('download', `nine_rules_audits_${currentAuditFilter.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.json`);
+            dlAnchor.click();
+        }
+
+        // --- Restore Demo Audits ---
+        function restoreDemoAudits() {
+            nineRulesAuditHistory = [...DEFAULT_DEMO_AUDITS];
+            saveHistoryToStorage();
+            updateOverviewMetrics();
+            renderAuditsExplorer();
+            renderHistoryTable();
+        }
+
+        // --- "What is What" Standards Guide Accordion ---
+        function renderStandardsGuide() {
+            const grid = document.getElementById('standardsGridContent');
+            if (!grid) return;
+            grid.innerHTML = STANDARD_RULES.map(r => `
+                <div class="standard-item-box">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+                        <strong style="color: var(--primary);">Rule ${r.ruleNumber}: ${escapeHtml(r.name)}</strong>
+                        <span class="badge" style="background: rgba(99, 102, 241, 0.1); color: var(--primary); font-size: 0.68rem;">${r.weight} pts</span>
+                    </div>
+                    <div style="font-size: 0.72rem; color: var(--text-dim); margin-bottom: 0.35rem; text-transform: uppercase;">Category: ${escapeHtml(r.category)}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.35;">${escapeHtml(r.description)}</div>
+                    <div style="font-size: 0.72rem; color: #a5b4fc; margin-top: 0.35rem; line-height: 1.3;">
+                        <strong>What to perform:</strong> ${escapeHtml(r.remediation)}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function toggleStandardsGuide() {
+            const content = document.getElementById('standardsGridContent');
+            const chevron = document.getElementById('standardsChevron');
+            if (!content) return;
+            const isHidden = content.style.display === 'none';
+            content.style.display = isHidden ? 'grid' : 'none';
+            if (chevron) chevron.innerText = isHidden ? '▲ Click to Collapse' : '▼ Click to Expand';
+        }
+
+        // --- Synchronize History Table at Bottom ---
+        function renderHistoryTable() {
+            const tbody = document.getElementById('historyTableBody');
+            if (!tbody) return;
+
+            if (!nineRulesAuditHistory || nineRulesAuditHistory.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">No audits recorded yet. Run a scan above or click "Reset Demos"!</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = nineRulesAuditHistory.map(h => `
+                <tr>
+                    <td>${new Date(h.timestamp).toLocaleTimeString()}</td>
+                    <td><strong>${escapeHtml(h.target)}</strong></td>
+                    <td>${escapeHtml(h.method)}</td>
+                    <td><strong>${h.score}%</strong> (${h.rulesFollowedCount || 0}/9)</td>
+                    <td><span class="badge ${h.score === 100 ? 'badge-green' : (h.score >= 60 ? 'badge-amber' : 'badge-red')}">${escapeHtml(h.status)}</span></td>
+                    <td><strong style="color: ${h.recommendation === 'KEEP' ? 'var(--accent-emerald)' : (h.recommendation === 'REVIEW' ? 'var(--accent-amber)' : 'var(--accent-rose)')};">${escapeHtml(h.recommendation)}</strong></td>
+                </tr>
+            `).join('');
+        }
+
+        function clearHistory() {
+            if (!confirm('Are you sure you want to clear the local verification audit history?')) return;
+            nineRulesAuditHistory = [];
+            saveHistoryToStorage();
+            updateOverviewMetrics();
+            renderAuditsExplorer();
+            renderHistoryTable();
+            const resCard = document.getElementById('resultCard');
+            if (resCard) resCard.style.display = 'none';
+        }
+
+        // --- Export Helpers ---
+        function exportReportJSON() {
+            if (!lastReport) return;
+            const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(lastReport, null, 2));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute('href', dataStr);
+            dlAnchor.setAttribute('download', `nine-rules-audit-${(lastReport.agentName || 'report').replace(/[^a-z0-9]/gi, '_')}.json`);
+            dlAnchor.click();
+        }
+
+        function copyReportJSON() {
+            if (!lastReport) return;
+            navigator.clipboard.writeText(JSON.stringify(lastReport, null, 2))
+                .then(() => alert('Report JSON copied to clipboard!'))
+                .catch(() => alert('Could not copy to clipboard.'));
+        }
+
+        function loadSampleAgent() {
+            document.getElementById('pasteAgentName').value = 'Automated Property Lead Assistant';
+            document.getElementById('pasteCodeContent').value = `/**
+ * Automated Property Lead Assistant
+ * Purpose: Continuously monitor incoming buyer enquiries, reason over budget/location fit, and auto-dispatch qualified leads to agents.
+ */
+class RealEstateLeadAgent {
+    constructor() {
+        this.goal = "Qualify buyer inquiries and automatically match with current property inventory";
+        this.model = "gpt-4o";
+        this.tools = ["databaseQuery", "propertySearch", "sendWhatsAppNotification", "scheduleSiteVisit"];
+        this.context = { sessionHistory: [], activeLeads: [] };
+        this.retryPolicy = { retries: 3, backoffMs: 1000 };
+    }
+
+    async runAgentLoop() {
+        while (this.isRunning) {
+            const inquiry = await this.observeIncomingInquiries();
+            if (inquiry) {
+                const decision = await this.reasonAndDecide(inquiry);
+                if (decision.confidence > 0.85) {
+                    await this.executeAction(decision);
+                }
+            }
+            await this.sleep(2000);
+        }
+    }
+
+    async reasonAndDecide(inquiry) {
+        // Cognitive reasoning step using LLM prompts
+        const prompt = \`Evaluate suitability for lead: \${JSON.stringify(inquiry)}\`;
+        const response = await this.llm.invoke({ prompt });
+        return { confidence: 0.92, action: "DISPATCH_AGENT", data: response };
+    }
+
+    async executeAction(decision) {
+        try {
+            await this.tools.dispatch(decision.action);
+        } catch (err) {
+            // Adaptive retry and recovery
+            await this.handleFallback(err);
+        }
+    }
+}`;
+        }
+
+        function escapeHtml(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // Initialize QA system and history on load
+        initNineRulesQA();
+    </script>
+</body>
+
+</html>

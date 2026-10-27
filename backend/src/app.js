@@ -679,6 +679,12 @@ function createApp(options = {}) {
     const agentMasterRegistrySource = options.agentMasterRegistrySource || new AgentMasterRegistrySource({
         readService: defaultPersistenceManager.getDatabaseService()
     });
+    if (agentService) {
+        agentService.masterSource = agentMasterRegistrySource;
+        if (typeof agentService.loadMasterAgents === 'function') {
+            agentService.loadMasterAgents().catch(() => {});
+        }
+    }
     const { AgentMasterEvaluator } = require('./registry/AgentMasterEvaluator');
     const agentMasterEvaluator = options.agentMasterEvaluator || new AgentMasterEvaluator({
         masterSource: agentMasterRegistrySource,
@@ -813,12 +819,46 @@ function createApp(options = {}) {
         next();
     });
 
+    // CORS middleware: allow requests from standalone frontend (e.g. port 5000, etc.)
+    app.use((req, res, next) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-role, x-user-role, x-tenant-id');
+        if (req.method === 'OPTIONS') {
+            return res.sendStatus(204);
+        }
+        next();
+    });
+
     // Multi-tenant middleware
     app.use(tenantMiddleware());
 
     // Body parsing middleware
     app.use(express.json({ limit: '10mb' }));
     app.use(express.urlencoded({ extended: true }));
+
+    // Automatic gzip response compression for payloads > 2KB
+    const zlib = require('zlib');
+    app.use((req, res, next) => {
+        const acceptEncoding = req.headers['accept-encoding'] || '';
+        if (!acceptEncoding.includes('gzip')) return next();
+        const origSend = res.send;
+        res.send = function (body) {
+            if ((typeof body === 'string' && body.length > 2048) || (Buffer.isBuffer(body) && body.length > 2048)) {
+                const buf = Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8');
+                zlib.gzip(buf, (err, compressed) => {
+                    if (err) return origSend.call(this, body);
+                    res.setHeader('Content-Encoding', 'gzip');
+                    res.removeHeader('Content-Length');
+                    res.setHeader('Content-Length', compressed.length);
+                    return origSend.call(this, compressed);
+                });
+                return;
+            }
+            return origSend.call(this, body);
+        };
+        next();
+    });
 
     // Serve static files (including index.html frontend).
     const fs = require('fs');

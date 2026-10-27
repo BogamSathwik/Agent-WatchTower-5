@@ -28,35 +28,35 @@ class ConfigurationService {
     constructor() {
         this.config = {
             platform: {
-                name: 'Universal Monitoring & Intelligence Platform',
-                version: '15.0.0',
+                name: process.env.PLATFORM_NAME || 'Universal Monitoring & Intelligence Platform',
+                version: process.env.PLATFORM_VERSION || '15.0.0',
                 environment: process.env.NODE_ENV || 'development'
             },
             telemetry: {
-                enabled: true,
-                prometheusEnabled: true,
-                metricsPath: '/api/v1/telemetry/metrics'
+                enabled: process.env.TELEMETRY_ENABLED !== 'false',
+                prometheusEnabled: process.env.PROMETHEUS_ENABLED !== 'false',
+                metricsPath: process.env.METRICS_PATH || '/api/v1/telemetry/metrics'
             },
             tenant: {
-                mode: 'SINGLE_AND_MULTI_TENANT',
-                defaultTenant: 'default-tenant'
+                mode: process.env.TENANT_MODE || 'SINGLE_AND_MULTI_TENANT',
+                defaultTenant: process.env.DEFAULT_TENANT || 'default-tenant'
             },
             audit: {
-                enabled: true,
-                retentionDays: 30,
-                maxRecords: 5000
+                enabled: process.env.AUDIT_ENABLED !== 'false',
+                retentionDays: parseInt(process.env.AUDIT_RETENTION_DAYS, 10) || 30,
+                maxRecords: parseInt(process.env.AUDIT_MAX_RECORDS, 10) || 5000
             },
             persistence: {
                 mode: process.env.PERSISTENCE_MODE || 'memory',
-                autoRestoreOnStartup: true
+                autoRestoreOnStartup: process.env.AUTO_RESTORE !== 'false'
             },
             alerting: {
-                enabled: true,
-                maxEscalationLevel: 3
+                enabled: process.env.ALERTING_ENABLED !== 'false',
+                maxEscalationLevel: parseInt(process.env.MAX_ESCALATION_LEVEL, 10) || 3
             },
             remediation: {
-                policyMode: 'APPROVAL_REQUIRED',
-                dryRunDefault: true
+                policyMode: process.env.REMEDIATION_POLICY_MODE || 'APPROVAL_REQUIRED',
+                dryRunDefault: process.env.REMEDIATION_DRY_RUN !== 'false'
             }
         };
     }

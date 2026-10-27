@@ -80,6 +80,10 @@ class AgentMasterRegistrySource {
         // Existing read-only database access (MySqlReadAccessService in mysql
         // mode). Null when the app runs in memory/file mode.
         this.readService = options.readService || options.databaseService || null;
+        this._rowsCache = null;
+        this._rowsCacheTime = 0;
+        this._rowsCacheTtlMs = options.cacheTtlMs || 60000;
+        this._fetchInflight = null;
     }
 
     isAvailable() {
@@ -255,24 +259,45 @@ class AgentMasterRegistrySource {
         };
     }
 
-    async _fetchAllRows() {
+    invalidateCache() {
+        this._rowsCache = null;
+        this._rowsCacheTime = 0;
+    }
+
+    async _fetchAllRows(force = false) {
         this._assertAvailable();
-        const rows = [];
-        const pageSize = 100;
-        let offset = 0;
-        for (;;) {
-            const page = await this.readService.queryTable(MASTER_TABLE, {
-                orderBy: 'ID',
-                orderDir: 'ASC',
-                limit: pageSize,
-                offset
-            });
-            if (!Array.isArray(page) || page.length === 0) break;
-            rows.push(...page);
-            if (page.length < pageSize) break;
-            offset += pageSize;
+        const now = Date.now();
+        if (!force && this._rowsCache && (now - this._rowsCacheTime < this._rowsCacheTtlMs)) {
+            return this._rowsCache;
         }
-        return rows;
+        if (this._fetchInflight) {
+            return this._fetchInflight;
+        }
+        this._fetchInflight = (async () => {
+            const rows = [];
+            const pageSize = 1000;
+            let offset = 0;
+            for (;;) {
+                const page = await this.readService.queryTable(MASTER_TABLE, {
+                    orderBy: 'ID',
+                    orderDir: 'ASC',
+                    limit: pageSize,
+                    offset
+                });
+                if (!Array.isArray(page) || page.length === 0) break;
+                rows.push(...page);
+                if (page.length < pageSize) break;
+                offset += pageSize;
+            }
+            this._rowsCache = rows;
+            this._rowsCacheTime = Date.now();
+            return rows;
+        })();
+        try {
+            return await this._fetchInflight;
+        } finally {
+            this._fetchInflight = null;
+        }
     }
 
     /**

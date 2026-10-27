@@ -114,7 +114,7 @@ class McpService {
         const tenantId = options.tenantId || 'global';
         const correlationId = options.correlationId || `corr_mcp_${Date.now()}`;
 
-        if (!this.policy.isRoleAllowed(role)) {
+        if (!this.policy.isRoleAllowed(role, toolName)) {
             throw new Error(`Role '${role}' is not authorized to invoke MCP tools`);
         }
         if (!this.policy.isToolAllowed(toolName)) {

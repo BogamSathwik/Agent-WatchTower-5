@@ -101,27 +101,58 @@ function ensureRegistryEntries(bundlePath, requireName) {
         'src/api/agentRoutes.js');
 }
 
+function ensureComplianceEntries(bundlePath, requireName) {
+    ensureEntry(bundlePath, requireName,
+        'src/quality/AgentComplianceEngine.js',
+        'src/quality/AgentComplianceEngine.js',
+        'src/quality/QualityTestRunner.js');
+}
+
 const SERVER_MODULES = [
+    { key: 'src/persistence/MySqlReadAccessService.js', src: 'src/persistence/MySqlReadAccessService.js' },
     { key: 'src/persistence/MySqlPersistenceAdapter.js', src: 'src/persistence/MySqlPersistenceAdapter.js' },
     { key: 'src/persistence/PersistenceManager.js', src: 'src/persistence/PersistenceManager.js' },
     { key: 'src/agent/AgentService.js', src: 'src/agent/AgentService.js' },
+    { key: 'src/agent/UniversalAgentContract.js', src: 'src/agent/UniversalAgentContract.js' },
+    { key: 'src/api/agentRoutes.js', src: 'src/api/agentRoutes.js' },
     { key: 'src/registry/SystemRegistry.js', src: 'src/registry/SystemRegistry.js' },
+    { key: 'src/config/ConfigurationService.js', src: 'src/config/ConfigurationService.js' },
+    { key: 'src/adapter/profiles/ExternalAgentProfiles.js', src: 'src/adapter/profiles/ExternalAgentProfiles.js' },
+    { key: 'src/monitoring/AgentMonitoringService.js', src: 'src/monitoring/AgentMonitoringService.js' },
+    { key: 'src/mcp/McpPolicy.js', src: 'src/mcp/McpPolicy.js' },
+    { key: 'src/mcp/McpRequestValidator.js', src: 'src/mcp/McpRequestValidator.js' },
+    { key: 'src/mcp/McpClient.js', src: 'src/mcp/McpClient.js' },
+    { key: 'src/mcp/McpService.js', src: 'src/mcp/McpService.js' },
+    { key: 'src/api/mcpRoutes.js', src: 'src/api/mcpRoutes.js' },
     { key: 'src/app.js', src: 'src/app.js' }
 ];
 
 const ROUTER_MODULES = [
+    { key: 'src/persistence/MySqlReadAccessService.js', src: 'src/persistence/MySqlReadAccessService.js' },
     { key: 'src/persistence/MySqlPersistenceAdapter.js', src: 'src/persistence/MySqlPersistenceAdapter.js' },
     { key: 'src/persistence/PersistenceManager.js', src: 'src/persistence/PersistenceManager.js' },
     { key: 'src/agent/AgentService.js', src: 'src/agent/AgentService.js' },
-    { key: 'src/registry/SystemRegistry.js', src: 'src/registry/SystemRegistry.js' }
+    { key: 'src/agent/UniversalAgentContract.js', src: 'src/agent/UniversalAgentContract.js' },
+    { key: 'src/api/agentRoutes.js', src: 'src/api/agentRoutes.js' },
+    { key: 'src/registry/SystemRegistry.js', src: 'src/registry/SystemRegistry.js' },
+    { key: 'src/config/ConfigurationService.js', src: 'src/config/ConfigurationService.js' },
+    { key: 'src/adapter/profiles/ExternalAgentProfiles.js', src: 'src/adapter/profiles/ExternalAgentProfiles.js' },
+    { key: 'src/monitoring/AgentMonitoringService.js', src: 'src/monitoring/AgentMonitoringService.js' },
+    { key: 'src/mcp/McpPolicy.js', src: 'src/mcp/McpPolicy.js' },
+    { key: 'src/mcp/McpRequestValidator.js', src: 'src/mcp/McpRequestValidator.js' },
+    { key: 'src/mcp/McpClient.js', src: 'src/mcp/McpClient.js' },
+    { key: 'src/mcp/McpService.js', src: 'src/mcp/McpService.js' },
+    { key: 'src/api/mcpRoutes.js', src: 'src/api/mcpRoutes.js' }
 ];
 
 ensureStoreEntry(path.join(ROOT, 'server.js'), 'require');
 ensureRegistryEntries(path.join(ROOT, 'server.js'), 'require');
+ensureComplianceEntries(path.join(ROOT, 'server.js'), 'require');
 patchBundle(path.join(ROOT, 'server.js'), 'require', SERVER_MODULES);
 
 ensureStoreEntry(path.join(ROOT, 'router.js'), '__rq');
 ensureRegistryEntries(path.join(ROOT, 'router.js'), '__rq');
+ensureComplianceEntries(path.join(ROOT, 'router.js'), '__rq');
 patchBundle(path.join(ROOT, 'router.js'), '__rq', ROUTER_MODULES);
 
 console.log('bundle sync complete');

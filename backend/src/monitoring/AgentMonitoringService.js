@@ -183,11 +183,11 @@ class AgentMonitoringService {
             }
         }
 
-        // Default endpoint fallbacks for standard test agent setups
+        // Dynamic endpoint fallbacks using environment configuration
         if (agentId === 'TEST-AGENT-001' || agentId.includes('test-agent')) {
-            return 'http://localhost:4001';
+            return process.env.TEST_AGENT_URL || `http://${process.env.HOST || 'localhost'}:${process.env.TEST_AGENT_PORT || 4001}`;
         }
-        return 'http://localhost:3000';
+        return process.env.APP_BASE_URL || process.env.SERVER_URL || `http://${process.env.HOST || 'localhost'}:${process.env.PORT || 3000}`;
     }
 
     _publishTelemetryEvent(telemetryPayload) {

@@ -19,6 +19,35 @@
 
 const { AgentMasterRegistrySource } = require('./AgentMasterRegistrySource');
 
+let _verifyAgentNineRules = null;
+function getVerifyAgentNineRules() {
+    if (!_verifyAgentNineRules) {
+        const path = require('path');
+        const candidatePaths = [
+            path.resolve(__dirname, '../../../packages/agent-nine-rules/mcp'),
+            path.resolve(__dirname, '../../../../packages/agent-nine-rules/mcp'),
+            path.resolve(__dirname, '../../packages/agent-nine-rules/mcp'),
+            path.resolve(process.cwd(), 'packages/agent-nine-rules/mcp')
+        ];
+        for (const p of candidatePaths) {
+            try {
+                const mod = require(p);
+                if (mod && typeof mod.verifyAgentNineRules === 'function') {
+                    _verifyAgentNineRules = mod.verifyAgentNineRules;
+                    break;
+                }
+            } catch (_) {}
+        }
+        if (!_verifyAgentNineRules) {
+            try {
+                const mod = require('../../../packages/agent-nine-rules/mcp');
+                _verifyAgentNineRules = mod.verifyAgentNineRules;
+            } catch (_) {}
+        }
+    }
+    return _verifyAgentNineRules;
+}
+
 const EVALUATIONS_COLLECTION = 'master_evaluations';
 const PROBE_TIMEOUT_MS = 8000;
 const CAPABILITY_PROBE_TIMEOUT_MS = 5000;
@@ -270,6 +299,133 @@ class AgentMasterEvaluator {
         }
     }
 
+    /**
+     * Run the 9-rule verification as a separate compliance evaluation using
+     * available Watchtower evidence (never fabricating tasks, models, tools, or behavior).
+     *
+     * @param {Object} record - Raw AGENT_MASTER_REGISTRY record
+     * @param {Object|null} [probe] - Real HTTP probe result
+     * @param {Object|null} [capabilityProbe] - Real capability probe result
+     * @param {Object|null} [runtimeHealth] - Real runtime health assessment
+     * @param {Object|null} [context] - Real monitoring context
+     * @returns {Object} 9-rule compliance report strictly preserving master identity
+     */
+    evaluateNineRules(record = {}, probe = null, capabilityProbe = null, runtimeHealth = null, context = null) {
+        const verifyFn = getVerifyAgentNineRules();
+        if (!verifyFn) {
+            throw new Error('Nine-rule MCP capability (verify_agent_nine_rules) is unavailable.');
+        }
+
+        const isReachable = Boolean(probe && probe.ok && probe.status2xx);
+        const parsedBody = (probe && probe.bodyText) ? AgentMasterEvaluator._tryParseJson(probe.bodyText) : null;
+
+        // Extract discovered capabilities or tools from capabilityProbe or parsed body
+        let tools = [];
+        if (capabilityProbe && capabilityProbe.discovered && Array.isArray(capabilityProbe.capabilities) && capabilityProbe.capabilities.length > 0) {
+            tools = capabilityProbe.capabilities;
+        } else if (parsedBody && Array.isArray(parsedBody.tools) && parsedBody.tools.length > 0) {
+            tools = parsedBody.tools;
+        } else if (parsedBody && Array.isArray(parsedBody.capabilities) && parsedBody.capabilities.length > 0) {
+            tools = parsedBody.capabilities;
+        } else if (Array.isArray(record.tools) && record.tools.length > 0) {
+            tools = record.tools;
+        }
+
+        // Extract AI/model information ONLY if present in JSON document, record, or contract - never fabricate
+        const model = (parsedBody && (parsedBody.model || parsedBody.llm)) || record.model || null;
+
+        // Execution runner: if reachable URL
+        const runner = isReachable ? {
+            type: 'http',
+            endpoint: record.publicUrl,
+            latencyMs: probe.latencyMs
+        } : (record.runner || null);
+
+        // Connection profile: if reachable, health endpoint is known
+        const connection = isReachable ? {
+            healthEndpoint: record.publicUrl,
+            ...(record.connection || {})
+        } : (record.connection || null);
+
+        // Build candidate with exact identity preservation
+        const candidate = {
+            ID: record.masterId !== undefined ? record.masterId : (record.ID !== undefined ? record.ID : (record.id !== undefined ? record.id : null)),
+            USERID: record.userId !== undefined ? record.userId : (record.USERID !== undefined ? record.USERID : null),
+            FIRMID: record.firmId !== undefined ? record.firmId : (record.FIRMID !== undefined ? record.FIRMID : null),
+            FILENAME: record.filename !== undefined ? record.filename : (record.FILENAME !== undefined ? record.FILENAME : null),
+            AGENT_NAME: record.agentName !== undefined ? record.agentName : (record.AGENT_NAME !== undefined ? record.AGENT_NAME : (record.name !== undefined ? record.name : null)),
+            PUBLIC_URL: record.publicUrl !== undefined ? record.publicUrl : (record.PUBLIC_URL !== undefined ? record.PUBLIC_URL : null),
+
+            id: record.masterId !== undefined ? record.masterId : record.id,
+            name: record.agentName !== undefined ? record.agentName : record.name,
+            purpose: record.summary || record.purpose || null,
+            description: record.summary || record.description || null,
+            category: record.category || null,
+            endpoint: record.publicUrl || record.endpoint || null,
+            url: record.publicUrl || record.url || null,
+
+            tools,
+            toolsString: tools.length > 0 ? tools.map(t => typeof t === 'string' ? t : (t.name || JSON.stringify(t))).join(', ') : (record.toolsString || ''),
+            model,
+            runner,
+            connection,
+
+            tenantId: record.tenantId || (record.firmId ? String(record.firmId) : (record.userId ? String(record.userId) : null)),
+            environment: record.environment || {
+                firmId: record.firmId,
+                userId: record.userId,
+                isPublic: record.isPublic,
+                hasBackend: record.hasBackend,
+                recordKind: record.recordKind
+            },
+
+            monitoring: (context && context.monitoring && context.monitoring.tracked) ? {
+                tracked: true,
+                agentId: context.monitoring.agentId,
+                currentState: context.monitoring.currentState,
+                healthCheckIntervalMs: 60000,
+                qualityTestingEnabled: true
+            } : (record.monitoring || null),
+
+            schedule: record.schedule || null,
+            policy: record.policy || null,
+            decisionPolicy: record.decisionPolicy || null,
+            fileContent: record.fileContent || null,
+            codeSnippet: record.codeSnippet || null,
+            compliance: record.compliance || null,
+            unverifiedRules: Array.isArray(record.unverifiedRules) ? record.unverifiedRules : null,
+            unknownRules: Array.isArray(record.unknownRules) ? record.unknownRules : null,
+
+            // Unprobed flag: true when unreachable or no live probe
+            unprobed: !isReachable
+        };
+
+        const runtimeCtx = {
+            health: runtimeHealth ? {
+                status: runtimeHealth.state === 'HEALTHY' ? 'HEALTHY' : (
+                    runtimeHealth.state === 'OFFLINE' ? 'OFFLINE' : (
+                        runtimeHealth.state === 'UNHEALTHY' ? 'UNHEALTHY' : (
+                            runtimeHealth.state === 'DEGRADED' ? 'DEGRADED' : 'UNKNOWN'
+                        )
+                    )
+                ),
+                reason: runtimeHealth.basis
+            } : { status: 'UNKNOWN', reason: 'No runtime health probe performed' },
+            toolStatus: {
+                available: Boolean(capabilityProbe && capabilityProbe.discovered)
+            },
+            lastExecution: isReachable ? {
+                success: true,
+                latencyMs: probe.latencyMs
+            } : (probe && probe.error ? {
+                success: false,
+                error: probe.error
+            } : null)
+        };
+
+        return verifyFn({ agent: candidate, runtimeContext: runtimeCtx });
+    }
+
     async _persistResult(result) {
         if (!this.persistenceManager) return false;
         try {
@@ -285,7 +441,34 @@ class AgentMasterEvaluator {
         if (!this.persistenceManager || typeof this.persistenceManager.get !== 'function') return null;
         try {
             const stored = await this.persistenceManager.get(EVALUATIONS_COLLECTION, String(masterId));
-            return stored === undefined ? null : stored;
+            if (!stored) return null;
+            // Backward compatibility: If an existing evaluation doesn't have nineRules yet,
+            // construct it dynamically from the stored evidence without re-probing.
+            if (!stored.nineRules && this.masterSource && typeof this.masterSource.getRecordById === 'function') {
+                try {
+                    const record = await this.masterSource.getRecordById(masterId);
+                    if (record) {
+                        const probe = stored.reachability ? {
+                            ok: Boolean(stored.reachability.reachable),
+                            status2xx: Boolean(stored.reachability.reachable && stored.reachability.httpStatus >= 200 && stored.reachability.httpStatus < 300),
+                            httpStatus: stored.reachability.httpStatus || 0,
+                            latencyMs: stored.reachability.latencyMs || 0,
+                            contentType: stored.reachability.contentType || '',
+                            error: stored.reachability.error || null,
+                            bodyText: ''
+                        } : null;
+                        const capabilityProbe = {
+                            probed: true,
+                            discovered: stored.capabilityStatus === 'AVAILABLE',
+                            capabilities: Array.isArray(stored.capabilities) ? stored.capabilities : []
+                        };
+                        const runtimeHealth = stored.runtimeHealth || { state: 'UNKNOWN', basis: 'Stored evaluation' };
+                        const context = { monitoring: stored.monitoring || null, incident: stored.incident || null };
+                        stored.nineRules = this.evaluateNineRules(record, probe, capabilityProbe, runtimeHealth, context);
+                    }
+                } catch (_) {}
+            }
+            return stored;
         } catch (_) {
             return null;
         }
@@ -326,6 +509,7 @@ class AgentMasterEvaluator {
         const classification = AgentMasterEvaluator.classifyEvidence({ probe, capabilityProbe });
         const runtimeHealth = AgentMasterEvaluator._runtimeHealth(probe);
         const context = this._monitoringContext(record.masterId);
+        const nineRules = this.evaluateNineRules(record, probe, capabilityProbe, runtimeHealth, context);
 
         const result = {
             masterId: record.masterId,
@@ -368,6 +552,7 @@ class AgentMasterEvaluator {
             },
             agentType: classification.agentType,
             evidence: classification.evidence,
+            nineRules,
             monitoring: context.monitoring,
             incident: context.incident,
             source: record.source || { database: 'nrkindex_trn', table: 'AGENT_MASTER_REGISTRY' }

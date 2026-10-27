@@ -27,11 +27,11 @@
 
 const crypto = require('crypto');
 
-const TABLE = 'agent_data';
-const STORE_USER_ID = 0;
-const STORE_FIRM_ID = 5;
-const STORE_NAME = 'AgentWatchtower';
-const COLLECTION_PREFIX = 'wt_';
+const TABLE = process.env.STORE_TABLE || 'agent_data';
+const STORE_USER_ID = process.env.STORE_USER_ID !== undefined ? parseInt(process.env.STORE_USER_ID, 10) : 0;
+const STORE_FIRM_ID = process.env.STORE_FIRM_ID !== undefined ? parseInt(process.env.STORE_FIRM_ID, 10) : 5;
+const STORE_NAME = process.env.STORE_NAME || 'AgentWatchtower';
+const COLLECTION_PREFIX = process.env.STORE_COLLECTION_PREFIX || 'wt_';
 const AGENT_ID_MAX_LEN = 100;
 const COLLECTION_PATTERN = /^[A-Za-z0-9_]{1,64}$/;
 
@@ -113,6 +113,9 @@ class AgentDataStore {
         assertMysqlConfigured(this.config);
         this.pool = null;
         this.table = TABLE;
+        this._listCache = new Map();
+        this._listCacheTime = new Map();
+        this._listCacheTtlMs = 30000;
     }
 
     _getPool() {
@@ -226,6 +229,7 @@ class AgentDataStore {
                     [STORE_USER_ID, STORE_FIRM_ID, STORE_NAME, agentId, nsCollection, envelopeJson]
                 );
             }
+            this._listCache.delete(nsCollection);
             return deepClone(storedValue);
         } catch (err) {
             throw this._sanitizedError(err, 'set');
@@ -262,6 +266,7 @@ class AgentDataStore {
                 'UPDATE `agent_data` SET `data` = CAST(? AS JSON) WHERE `id` = ?',
                 [tombstone, existing[0].id]
             );
+            this._listCache.delete(nsCollection);
             return true;
         } catch (err) {
             throw this._sanitizedError(err, 'delete');
@@ -270,6 +275,12 @@ class AgentDataStore {
 
     async list(collection) {
         const nsCollection = toNamespacedCollection(collection);
+        const now = Date.now();
+        const cached = this._listCache.get(nsCollection);
+        const cachedTime = this._listCacheTime.get(nsCollection) || 0;
+        if (cached && (now - cachedTime < this._listCacheTtlMs)) {
+            return deepClone(cached);
+        }
         const pool = this._getPool();
         try {
             const [rows] = await pool.execute(
@@ -280,9 +291,11 @@ class AgentDataStore {
             for (const row of rows || []) {
                 const envelope = parseEnvelope(row.data);
                 if (!envelope || isTombstone(envelope)) continue;
-                out.push(deepClone(envelope.value !== undefined ? envelope.value : null));
+                out.push(envelope.value !== undefined ? envelope.value : null);
             }
-            return out;
+            this._listCache.set(nsCollection, out);
+            this._listCacheTime.set(nsCollection, now);
+            return deepClone(out);
         } catch (err) {
             throw this._sanitizedError(err, 'list');
         }
@@ -294,6 +307,8 @@ class AgentDataStore {
      * every row in this store's 'wt_*' namespace (other agents' rows untouched).
      */
     async clear(collection) {
+        this._listCache.clear();
+        this._listCacheTime.clear();
         const pool = this._getPool();
         try {
             if (collection) {

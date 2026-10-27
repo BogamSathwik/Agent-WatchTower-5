@@ -89,7 +89,24 @@ class UniversalAgentContract {
             ? raw.metadata
             : {};
 
-        this.createdAt = raw.createdAt || now;
+        // Compliance assessment against the 9 Core Agent Rules
+        const { defaultComplianceEngine } = require('../quality/AgentComplianceEngine');
+        this.compliance = (raw.compliance && typeof raw.compliance === 'object' && raw.compliance.complianceScore !== undefined)
+            ? raw.compliance
+            : defaultComplianceEngine.scan(raw);
+
+        // Extended Agent Attributes (Agent Master Registry fields)
+        this.userId = raw.userId || (raw.metadata && raw.metadata.masterUserId) || null;
+        this.firmId = raw.firmId || (raw.metadata && raw.metadata.masterFirmId) || null;
+        this.masterId = raw.masterId || (raw.metadata && raw.metadata.masterRegistryId) || null;
+        this.addedAt = raw.addedAt || raw.insertDtm || (raw.metadata && raw.metadata.insertDtm) || raw.createdAt || now;
+        this.purpose = raw.purpose || raw.summary || raw.description || null;
+        this.agentType = raw.agentType || raw.type || (raw.hasBackend ? 'FULL STACK' : 'WEB APP');
+        this.publicUrl = raw.publicUrl || (raw.connection && raw.connection.endpoint) || null;
+        this.filename = raw.filename || (raw.metadata && raw.metadata.masterFilename) || null;
+        this.hasBackend = raw.hasBackend !== undefined ? Boolean(raw.hasBackend) : false;
+
+        this.createdAt = raw.createdAt || this.addedAt || now;
         this.updatedAt = raw.updatedAt || now;
     }
 
@@ -130,6 +147,16 @@ class UniversalAgentContract {
             monitoring: this.monitoring,
             lifecycleState: this.lifecycleState,
             metadata: this.metadata,
+            compliance: this.compliance,
+            userId: this.userId,
+            firmId: this.firmId,
+            masterId: this.masterId,
+            addedAt: this.addedAt,
+            purpose: this.purpose,
+            agentType: this.agentType,
+            publicUrl: this.publicUrl,
+            filename: this.filename,
+            hasBackend: this.hasBackend,
             createdAt: this.createdAt,
             updatedAt: this.updatedAt
         };

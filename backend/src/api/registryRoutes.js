@@ -309,6 +309,14 @@ router.get(['/api/v1/registry/evaluations/by-agent', '/api/registry/evaluations/
                 userId: stored.userId,
                 firmId: stored.firmId,
                 decision,
+                nineRules: stored.nineRules ? {
+                    complianceScore: stored.nineRules.complianceScore,
+                    status: stored.nineRules.status,
+                    recommendation: stored.nineRules.recommendation,
+                    rulesFollowedCount: stored.nineRules.rulesFollowedCount,
+                    rulesMissingCount: stored.nineRules.rulesMissingCount,
+                    rulesUnknownCount: stored.nineRules.rulesUnknownCount
+                } : null,
                 trialSummary: trials && trials.reachabilitySummary ? {
                     trials: trials.reachabilitySummary.trials,
                     successful: trials.reachabilitySummary.successful,
@@ -456,46 +464,73 @@ function compareRank(a, b) {
     return (a.member.masterId || 0) - (b.member.masterId || 0);
 }
 
+let _cachedFunctionalGroups = null;
+let _cachedFunctionalGroupsTime = 0;
+let _functionalGroupsInflightPromise = null;
+
 // 8. GET /api/v1/registry/functional/groups — evidence-based functional groups
 router.get(['/api/v1/registry/functional/groups', '/api/registry/functional/groups'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), async (req, res) => {
     try {
-        const { records, evaluationsById, monitoringByAgent } = await assembleFunctionalInputs(req);
-        const profiler = AgentFunctionalProfiler;
-        const fps = records.map((r) => profiler.fingerprintRecord(r, evaluationsById[String(r.masterId)] || null));
-        const { groups, unclassified } = profiler.groupFingerprints(fps);
-        const byId = new Map(records.map((r) => [r.masterId, r]));
-
-        let minConfidence = null;
-        if (req.query.minConfidence) {
-            const v = String(req.query.minConfidence).toUpperCase();
-            if (['HIGH', 'MEDIUM', 'LOW'].includes(v)) minConfidence = v;
+        const isDefault = !req.query.minConfidence && !req.query.category && req.query.force !== 'true';
+        const now = Date.now();
+        if (isDefault && _cachedFunctionalGroups && (now - _cachedFunctionalGroupsTime < 60000)) {
+            return res.json(_cachedFunctionalGroups);
         }
-        const rank = { HIGH: 3, MEDIUM: 2, LOW: 1 };
-        const categoryFilter = req.query.category ? String(req.query.category).toLowerCase() : null;
-
-        const outGroups = [];
-        for (const g of groups) {
-            if (minConfidence && (rank[g.confidence] || 0) < rank[minConfidence]) continue;
-            const members = g.memberIds
-                .map((id) => byId.get(id))
-                .filter(Boolean)
-                .map((rec) => enrichFunctionalMember(rec, evaluationsById, monitoringByAgent, req));
-            if (categoryFilter && !members.some((m) => String(m.category || '').toLowerCase() === categoryFilter)) continue;
-            outGroups.push({ ...g, members });
+        if (isDefault && _functionalGroupsInflightPromise) {
+            const data = await _functionalGroupsInflightPromise;
+            return res.json(data);
         }
 
-        res.json({
-            success: true,
-            generatedAt: new Date().toISOString(),
-            totalRecords: records.length,
-            evaluatedCount: Object.keys(evaluationsById).length,
-            groupCount: outGroups.length,
-            groups: outGroups,
-            unclassified,
-            unclassifiedCount: unclassified.length,
-            functionalExecutionStatus: 'FUNCTIONAL_EXECUTION_NOT_YET_EVALUATED'
-        });
+        const computePromise = (async () => {
+            const { records, evaluationsById, monitoringByAgent } = await assembleFunctionalInputs(req);
+            const profiler = AgentFunctionalProfiler;
+            const fps = records.map((r) => profiler.fingerprintRecord(r, evaluationsById[String(r.masterId)] || null));
+            const { groups, unclassified } = profiler.groupFingerprints(fps);
+            const byId = new Map(records.map((r) => [r.masterId, r]));
+
+            let minConfidence = null;
+            if (req.query.minConfidence) {
+                const v = String(req.query.minConfidence).toUpperCase();
+                if (['HIGH', 'MEDIUM', 'LOW'].includes(v)) minConfidence = v;
+            }
+            const rank = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+            const categoryFilter = req.query.category ? String(req.query.category).toLowerCase() : null;
+
+            const outGroups = [];
+            for (const g of groups) {
+                if (minConfidence && (rank[g.confidence] || 0) < rank[minConfidence]) continue;
+                const members = g.memberIds
+                    .map((id) => byId.get(id))
+                    .filter(Boolean)
+                    .map((rec) => enrichFunctionalMember(rec, evaluationsById, monitoringByAgent, req));
+                if (categoryFilter && !members.some((m) => String(m.category || '').toLowerCase() === categoryFilter)) continue;
+                outGroups.push({ ...g, members });
+            }
+
+            const responsePayload = {
+                success: true,
+                generatedAt: new Date().toISOString(),
+                totalRecords: records.length,
+                evaluatedCount: Object.keys(evaluationsById).length,
+                groupCount: outGroups.length,
+                groups: outGroups,
+                unclassified,
+                unclassifiedCount: unclassified.length,
+                functionalExecutionStatus: 'FUNCTIONAL_EXECUTION_NOT_YET_EVALUATED'
+            };
+            if (isDefault) {
+                _cachedFunctionalGroups = responsePayload;
+                _cachedFunctionalGroupsTime = Date.now();
+            }
+            return responsePayload;
+        })();
+
+        if (isDefault) _functionalGroupsInflightPromise = computePromise;
+        const result = await computePromise;
+        if (isDefault) _functionalGroupsInflightPromise = null;
+        res.json(result);
     } catch (err) {
+        if (isDefault) _functionalGroupsInflightPromise = null;
         const mapped = toMasterError(err, 'FUNCTIONAL_GROUPS_FAILED');
         res.status(mapped.status).json(mapped.body);
     }
@@ -893,14 +928,29 @@ router.post(['/api/v1/registry/functional/test', '/api/registry/functional/test'
     }
 });
 
+let _cachedFleetReport = null;
+let _cachedFleetReportTime = 0;
+let _fleetReportInflightPromise = null;
+
 // 12. GET /api/v1/registry/functional/report — fleet evaluation report:
 // summary counts, per-group summaries with member decisions, and the full
 // decision table. Decisions are recommendations only; nothing is
 // deleted, retired, or modified.
 router.get(['/api/v1/registry/functional/report', '/api/registry/functional/report'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), async (req, res) => {
     try {
-        const { records, evaluationsById, monitoringByAgent } = await assembleFunctionalInputs(req);
-        const trialsById = await loadTrialsMap(req);
+        const force = req.query.force === 'true';
+        const now = Date.now();
+        if (!force && _cachedFleetReport && (now - _cachedFleetReportTime < 60000)) {
+            return res.json(_cachedFleetReport);
+        }
+        if (_fleetReportInflightPromise) {
+            const data = await _fleetReportInflightPromise;
+            return res.json(data);
+        }
+
+        const computePromise = (async () => {
+            const { records, evaluationsById, monitoringByAgent } = await assembleFunctionalInputs(req);
+            const trialsById = await loadTrialsMap(req);
         const profiler = AgentFunctionalProfiler;
         const fps = records.map((r) => profiler.fingerprintRecord(r, evaluationsById[String(r.masterId)] || null));
         const { groups, unclassified } = profiler.groupFingerprints(fps);
@@ -1029,44 +1079,54 @@ router.get(['/api/v1/registry/functional/report', '/api/registry/functional/repo
             .slice()
             .sort((a, b) => (a.masterId || 0) - (b.masterId || 0));
 
-        res.json({
-            success: true,
-            generatedAt: new Date().toISOString(),
-            summary: {
-                totalRecords: records.length,
-                testableUrls: records.filter((r) => r.externallyTestable).length,
-                nonTestableRecords: records.filter((r) => !r.externallyTestable).length,
-                agentCount: typeCount('AGENT'),
-                webAppCount: typeCount('WEB APP'),
-                unknownCount: typeCount('UNKNOWN'),
-                functionalGroups: reportGroups.length,
-                evaluatedRecords: evaluatedRecords.length,
-                trialRecords: Object.keys(trialsById).length,
-                functionallyTestedRecords: testedRecords.size,
-                keepCount: count('KEEP'),
-                reviewCount: count('REVIEW'),
-                retireCount: count('RETIRE')
-            },
-            records: flatRecords,
-            groups: reportGroups.map((g) => ({
-                groupId: g.groupId,
-                label: g.label,
-                confidence: g.confidence,
-                memberCount: g.memberCount,
-                testedCount: g.testedCount,
-                keepCount: g.keepCount,
-                reviewCount: g.reviewCount,
-                retireCount: g.retireCount,
-                strongestEvidence: g.strongestEvidence,
-                limitations: g.limitations,
-                members: g.members
-            })),
-            unclassified: unclassifiedDecisions,
-            unclassifiedCount: unclassifiedDecisions.length,
-            functionalExecutionStatus: 'FUNCTIONAL_EXECUTION_NOT_YET_EVALUATED',
-            executionDisclaimer: 'Decisions are recommendations only. Nothing was deleted, retired, or modified. Task-execution evidence exists only where controlled trials actually ran.'
-        });
+            const payload = {
+                success: true,
+                generatedAt: new Date().toISOString(),
+                summary: {
+                    totalRecords: records.length,
+                    testableUrls: records.filter((r) => r.externallyTestable).length,
+                    nonTestableRecords: records.filter((r) => !r.externallyTestable).length,
+                    agentCount: typeCount('AGENT'),
+                    webAppCount: typeCount('WEB APP'),
+                    unknownCount: typeCount('UNKNOWN'),
+                    functionalGroups: reportGroups.length,
+                    evaluatedRecords: evaluatedRecords.length,
+                    trialRecords: Object.keys(trialsById).length,
+                    functionallyTestedRecords: testedRecords.size,
+                    keepCount: count('KEEP'),
+                    reviewCount: count('REVIEW'),
+                    retireCount: count('RETIRE')
+                },
+                records: flatRecords,
+                groups: reportGroups.map((g) => ({
+                    groupId: g.groupId,
+                    label: g.label,
+                    confidence: g.confidence,
+                    memberCount: g.memberCount,
+                    testedCount: g.testedCount,
+                    keepCount: g.keepCount,
+                    reviewCount: g.reviewCount,
+                    retireCount: g.retireCount,
+                    strongestEvidence: g.strongestEvidence,
+                    limitations: g.limitations,
+                    members: g.members
+                })),
+                unclassified: unclassifiedDecisions,
+                unclassifiedCount: unclassifiedDecisions.length,
+                functionalExecutionStatus: 'FUNCTIONAL_EXECUTION_NOT_YET_EVALUATED',
+                executionDisclaimer: 'Decisions are recommendations only. Nothing was deleted, retired, or modified. Task-execution evidence exists only where controlled trials actually ran.'
+            };
+            _cachedFleetReport = payload;
+            _cachedFleetReportTime = Date.now();
+            return payload;
+        })();
+
+        _fleetReportInflightPromise = computePromise;
+        const result = await computePromise;
+        _fleetReportInflightPromise = null;
+        res.json(result);
     } catch (err) {
+        _fleetReportInflightPromise = null;
         const mapped = toMasterError(err, 'FUNCTIONAL_REPORT_FAILED');
         res.status(mapped.status).json(mapped.body);
     }
@@ -1161,8 +1221,10 @@ router.get(['/api/v1/registry/master/:id/full-report', '/api/registry/master/:id
                     runtimeHealth: evaluation.runtimeHealth || null,
                     capabilityStatus: evaluation.capabilityStatus || null,
                     capabilities: Array.isArray(evaluation.capabilities) ? evaluation.capabilities.slice(0, 20) : [],
-                    evidence: Array.isArray(evaluation.evidence) ? evaluation.evidence.slice(0, 10) : []
+                    evidence: Array.isArray(evaluation.evidence) ? evaluation.evidence.slice(0, 10) : [],
+                    nineRules: evaluation.nineRules || null
                 } : null,
+                nineRules: (evaluation && evaluation.nineRules) || null,
                 trials: trials ? {
                     testedAt: trials.testedAt || null,
                     reachabilityTrials: Array.isArray(trials.reachabilityTrials) ? trials.reachabilityTrials.slice(0, 5) : [],

@@ -26,7 +26,7 @@
 
 const TABLE_NAME_PATTERN = /^[A-Za-z0-9_]{1,64}$/;
 const COLUMN_NAME_PATTERN = /^[A-Za-z0-9_]{1,64}$/;
-const MAX_LIMIT = 100;
+const MAX_LIMIT = 5000;
 const DEFAULT_LIMIT = 20;
 
 function readMysqlConfig(overrides = {}) {

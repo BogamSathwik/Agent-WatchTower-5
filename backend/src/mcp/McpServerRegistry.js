@@ -42,7 +42,35 @@ class McpServerRegistry {
                 }
             ]
         });
+
+        this.registerServer({
+            serverId: 'nine-rules-mcp-server',
+            name: '9-Rule Autonomous Agent Evaluator MCP Server',
+            description: 'Dedicated Model Context Protocol server exposing verify_agent_nine_rules to verify agents and web apps against the 9 standard autonomous rules.',
+            transport: 'IN_PROCESS',
+            baseUrl: 'mcp://packages/agent-nine-rules',
+            status: 'CONNECTED',
+            tenantId: 'global',
+            tools: [
+                {
+                    name: 'verify_agent_nine_rules',
+                    description: 'Verifies an AI agent or web application against the 9 standard autonomous agent rules while preserving Watchtower master identity.',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            agent: { type: 'object', description: 'Agent or web app specification' },
+                            runtimeContext: { type: 'object', description: 'Optional runtime telemetry' }
+                        },
+                        required: ['agent']
+                    },
+                    allowedRoles: ['admin', 'operator', 'viewer'],
+                    enabled: true
+                }
+            ],
+            resources: []
+        });
     }
+
 
     registerServer(serverData = {}) {
         const serverId = serverData.serverId || serverData.id || `mcp_srv_${Date.now()}`;

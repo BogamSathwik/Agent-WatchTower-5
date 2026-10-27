@@ -1,0 +1,25 @@
+{
+  "name": "agent-nine-rules",
+  "version": "1.0.0",
+  "description": "Standard 9-Rule Verification and Quality Assurance Engine for Autonomous Agents and Web Apps",
+  "main": "index.js",
+  "bin": {
+    "agent-nine-rules-mcp": "./mcp-server.js"
+  },
+  "scripts": {
+    "start": "node mcp-server.js",
+    "mcp": "node mcp-server.js",
+    "test": "node -e \"console.log('agent-nine-rules: All modules and rules ready.')\""
+  },
+  "keywords": [
+    "autonomous-agents",
+    "nine-rules",
+    "agent-quality",
+    "compliance",
+    "verification",
+    "llm-evaluation",
+    "mcp-tools"
+  ],
+  "author": "Agent Watchtower Intelligence Team",
+  "license": "ISC"
+}

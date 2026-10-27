@@ -10,7 +10,7 @@ const COMPA_AGENT_PROFILE = Object.freeze({
     category: 'market_intelligence',
     version: '1.0.0',
     contractVersion: '1.0.0',
-    baseUrl: 'https://myblocks.in/compa-agent/',
+    baseUrl: process.env.COMPA_AGENT_URL || 'https://myblocks.in/compa-agent/',
     adapterType: 'ExternalAgentAdapter',
     capabilities: ['health', 'monitoring'],
     endpoints: {
@@ -21,8 +21,8 @@ const COMPA_AGENT_PROFILE = Object.freeze({
         execution: { path: '', method: 'POST', enabled: false }
     },
     authRef: { authType: 'none' },
-    timeoutConfig: { connectTimeoutMs: 5000, readTimeoutMs: 8000 },
-    retryConfig: { maxRetries: 2, retryDelayMs: 1000 }
+    timeoutConfig: { connectTimeoutMs: parseInt(process.env.AGENT_CONNECT_TIMEOUT_MS, 10) || 5000, readTimeoutMs: parseInt(process.env.AGENT_READ_TIMEOUT_MS, 10) || 8000 },
+    retryConfig: { maxRetries: parseInt(process.env.AGENT_MAX_RETRIES, 10) || 2, retryDelayMs: parseInt(process.env.AGENT_RETRY_DELAY_MS, 10) || 1000 }
 });
 
 const REPA_AGENT_PROFILE = Object.freeze({
@@ -31,7 +31,7 @@ const REPA_AGENT_PROFILE = Object.freeze({
     category: 'reputation_intelligence',
     version: '1.0.0',
     contractVersion: '1.0.0',
-    baseUrl: 'http://myblocks.in/repa-agent/REPA_Agent.html',
+    baseUrl: process.env.REPA_AGENT_URL || 'http://myblocks.in/repa-agent/REPA_Agent.html',
     adapterType: 'ExternalAgentAdapter',
     capabilities: ['health', 'monitoring'],
     endpoints: {
@@ -42,8 +42,8 @@ const REPA_AGENT_PROFILE = Object.freeze({
         execution: { path: '', method: 'POST', enabled: false }
     },
     authRef: { authType: 'none' },
-    timeoutConfig: { connectTimeoutMs: 5000, readTimeoutMs: 8000 },
-    retryConfig: { maxRetries: 2, retryDelayMs: 1000 }
+    timeoutConfig: { connectTimeoutMs: parseInt(process.env.AGENT_CONNECT_TIMEOUT_MS, 10) || 5000, readTimeoutMs: parseInt(process.env.AGENT_READ_TIMEOUT_MS, 10) || 8000 },
+    retryConfig: { maxRetries: parseInt(process.env.AGENT_MAX_RETRIES, 10) || 2, retryDelayMs: parseInt(process.env.AGENT_RETRY_DELAY_MS, 10) || 1000 }
 });
 
 module.exports = {

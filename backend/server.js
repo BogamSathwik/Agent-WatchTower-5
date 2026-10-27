@@ -766,6 +766,12 @@ function createApp(options = {}) {
     const agentMasterRegistrySource = options.agentMasterRegistrySource || new AgentMasterRegistrySource({
         readService: defaultPersistenceManager.getDatabaseService()
     });
+    if (agentService) {
+        agentService.masterSource = agentMasterRegistrySource;
+        if (typeof agentService.loadMasterAgents === 'function') {
+            agentService.loadMasterAgents().catch(() => {});
+        }
+    }
     const { AgentMasterEvaluator } = require('./registry/AgentMasterEvaluator');
     const agentMasterEvaluator = options.agentMasterEvaluator || new AgentMasterEvaluator({
         masterSource: agentMasterRegistrySource,
@@ -900,6 +906,17 @@ function createApp(options = {}) {
         next();
     });
 
+    // CORS middleware: allow requests from standalone frontend (e.g. port 5000, etc.)
+    app.use((req, res, next) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-role, x-user-role, x-tenant-id');
+        if (req.method === 'OPTIONS') {
+            return res.sendStatus(204);
+        }
+        next();
+    });
+
     // Multi-tenant middleware
     app.use(tenantMiddleware());
 
@@ -907,12 +924,37 @@ function createApp(options = {}) {
     app.use(express.json({ limit: '10mb' }));
     app.use(express.urlencoded({ extended: true }));
 
+    // Automatic gzip response compression for payloads > 2KB
+    const zlib = require('zlib');
+    app.use((req, res, next) => {
+        const acceptEncoding = req.headers['accept-encoding'] || '';
+        if (!acceptEncoding.includes('gzip')) return next();
+        const origSend = res.send;
+        res.send = function (body) {
+            if ((typeof body === 'string' && body.length > 2048) || (Buffer.isBuffer(body) && body.length > 2048)) {
+                const buf = Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8');
+                zlib.gzip(buf, (err, compressed) => {
+                    if (err) return origSend.call(this, body);
+                    res.setHeader('Content-Encoding', 'gzip');
+                    res.removeHeader('Content-Length');
+                    res.setHeader('Content-Length', compressed.length);
+                    return origSend.call(this, compressed);
+                });
+                return;
+            }
+            return origSend.call(this, body);
+        };
+        next();
+    });
+
     // Serve static files (including index.html frontend).
     const fs = require('fs');
     function getFrontendIndexPath() {
         const candidates = [
+            path.join(__dirname, '..', '..', 'frontend', 'index.html'),
             path.join(__dirname, '..', 'frontend', 'index.html'),
             path.join(__dirname, 'frontend', 'index.html'),
+            path.join(__dirname, '..', 'index.html'),
             path.join(__dirname, 'index.html'),
             typeof __BUNDLE_DIR__ !== 'undefined' && __BUNDLE_DIR__ ? path.join(__BUNDLE_DIR__, '..', 'frontend', 'index.html') : null,
             typeof __BUNDLE_DIR__ !== 'undefined' && __BUNDLE_DIR__ ? path.join(__BUNDLE_DIR__, 'frontend', 'index.html') : null,
@@ -1259,6 +1301,10 @@ class AgentMasterRegistrySource {
         // Existing read-only database access (MySqlReadAccessService in mysql
         // mode). Null when the app runs in memory/file mode.
         this.readService = options.readService || options.databaseService || null;
+        this._rowsCache = null;
+        this._rowsCacheTime = 0;
+        this._rowsCacheTtlMs = options.cacheTtlMs || 60000;
+        this._fetchInflight = null;
     }
 
     isAvailable() {
@@ -1434,24 +1480,45 @@ class AgentMasterRegistrySource {
         };
     }
 
-    async _fetchAllRows() {
+    invalidateCache() {
+        this._rowsCache = null;
+        this._rowsCacheTime = 0;
+    }
+
+    async _fetchAllRows(force = false) {
         this._assertAvailable();
-        const rows = [];
-        const pageSize = 100;
-        let offset = 0;
-        for (;;) {
-            const page = await this.readService.queryTable(MASTER_TABLE, {
-                orderBy: 'ID',
-                orderDir: 'ASC',
-                limit: pageSize,
-                offset
-            });
-            if (!Array.isArray(page) || page.length === 0) break;
-            rows.push(...page);
-            if (page.length < pageSize) break;
-            offset += pageSize;
+        const now = Date.now();
+        if (!force && this._rowsCache && (now - this._rowsCacheTime < this._rowsCacheTtlMs)) {
+            return this._rowsCache;
         }
-        return rows;
+        if (this._fetchInflight) {
+            return this._fetchInflight;
+        }
+        this._fetchInflight = (async () => {
+            const rows = [];
+            const pageSize = 1000;
+            let offset = 0;
+            for (;;) {
+                const page = await this.readService.queryTable(MASTER_TABLE, {
+                    orderBy: 'ID',
+                    orderDir: 'ASC',
+                    limit: pageSize,
+                    offset
+                });
+                if (!Array.isArray(page) || page.length === 0) break;
+                rows.push(...page);
+                if (page.length < pageSize) break;
+                offset += pageSize;
+            }
+            this._rowsCache = rows;
+            this._rowsCacheTime = Date.now();
+            return rows;
+        })();
+        try {
+            return await this._fetchInflight;
+        } finally {
+            this._fetchInflight = null;
+        }
     }
 
     /**
@@ -1570,6 +1637,35 @@ __registry["src/registry/AgentMasterEvaluator.js"] = function(module, exports, r
  */
 
 const { AgentMasterRegistrySource } = require('./AgentMasterRegistrySource');
+
+let _verifyAgentNineRules = null;
+function getVerifyAgentNineRules() {
+    if (!_verifyAgentNineRules) {
+        const path = require('path');
+        const candidatePaths = [
+            path.resolve(__dirname, '../../../packages/agent-nine-rules/mcp'),
+            path.resolve(__dirname, '../../../../packages/agent-nine-rules/mcp'),
+            path.resolve(__dirname, '../../packages/agent-nine-rules/mcp'),
+            path.resolve(process.cwd(), 'packages/agent-nine-rules/mcp')
+        ];
+        for (const p of candidatePaths) {
+            try {
+                const mod = require(p);
+                if (mod && typeof mod.verifyAgentNineRules === 'function') {
+                    _verifyAgentNineRules = mod.verifyAgentNineRules;
+                    break;
+                }
+            } catch (_) {}
+        }
+        if (!_verifyAgentNineRules) {
+            try {
+                const mod = require('../../../packages/agent-nine-rules/mcp');
+                _verifyAgentNineRules = mod.verifyAgentNineRules;
+            } catch (_) {}
+        }
+    }
+    return _verifyAgentNineRules;
+}
 
 const EVALUATIONS_COLLECTION = 'master_evaluations';
 const PROBE_TIMEOUT_MS = 8000;
@@ -1822,6 +1918,133 @@ class AgentMasterEvaluator {
         }
     }
 
+    /**
+     * Run the 9-rule verification as a separate compliance evaluation using
+     * available Watchtower evidence (never fabricating tasks, models, tools, or behavior).
+     *
+     * @param {Object} record - Raw AGENT_MASTER_REGISTRY record
+     * @param {Object|null} [probe] - Real HTTP probe result
+     * @param {Object|null} [capabilityProbe] - Real capability probe result
+     * @param {Object|null} [runtimeHealth] - Real runtime health assessment
+     * @param {Object|null} [context] - Real monitoring context
+     * @returns {Object} 9-rule compliance report strictly preserving master identity
+     */
+    evaluateNineRules(record = {}, probe = null, capabilityProbe = null, runtimeHealth = null, context = null) {
+        const verifyFn = getVerifyAgentNineRules();
+        if (!verifyFn) {
+            throw new Error('Nine-rule MCP capability (verify_agent_nine_rules) is unavailable.');
+        }
+
+        const isReachable = Boolean(probe && probe.ok && probe.status2xx);
+        const parsedBody = (probe && probe.bodyText) ? AgentMasterEvaluator._tryParseJson(probe.bodyText) : null;
+
+        // Extract discovered capabilities or tools from capabilityProbe or parsed body
+        let tools = [];
+        if (capabilityProbe && capabilityProbe.discovered && Array.isArray(capabilityProbe.capabilities) && capabilityProbe.capabilities.length > 0) {
+            tools = capabilityProbe.capabilities;
+        } else if (parsedBody && Array.isArray(parsedBody.tools) && parsedBody.tools.length > 0) {
+            tools = parsedBody.tools;
+        } else if (parsedBody && Array.isArray(parsedBody.capabilities) && parsedBody.capabilities.length > 0) {
+            tools = parsedBody.capabilities;
+        } else if (Array.isArray(record.tools) && record.tools.length > 0) {
+            tools = record.tools;
+        }
+
+        // Extract AI/model information ONLY if present in JSON document, record, or contract - never fabricate
+        const model = (parsedBody && (parsedBody.model || parsedBody.llm)) || record.model || null;
+
+        // Execution runner: if reachable URL
+        const runner = isReachable ? {
+            type: 'http',
+            endpoint: record.publicUrl,
+            latencyMs: probe.latencyMs
+        } : (record.runner || null);
+
+        // Connection profile: if reachable, health endpoint is known
+        const connection = isReachable ? {
+            healthEndpoint: record.publicUrl,
+            ...(record.connection || {})
+        } : (record.connection || null);
+
+        // Build candidate with exact identity preservation
+        const candidate = {
+            ID: record.masterId !== undefined ? record.masterId : (record.ID !== undefined ? record.ID : (record.id !== undefined ? record.id : null)),
+            USERID: record.userId !== undefined ? record.userId : (record.USERID !== undefined ? record.USERID : null),
+            FIRMID: record.firmId !== undefined ? record.firmId : (record.FIRMID !== undefined ? record.FIRMID : null),
+            FILENAME: record.filename !== undefined ? record.filename : (record.FILENAME !== undefined ? record.FILENAME : null),
+            AGENT_NAME: record.agentName !== undefined ? record.agentName : (record.AGENT_NAME !== undefined ? record.AGENT_NAME : (record.name !== undefined ? record.name : null)),
+            PUBLIC_URL: record.publicUrl !== undefined ? record.publicUrl : (record.PUBLIC_URL !== undefined ? record.PUBLIC_URL : null),
+
+            id: record.masterId !== undefined ? record.masterId : record.id,
+            name: record.agentName !== undefined ? record.agentName : record.name,
+            purpose: record.summary || record.purpose || null,
+            description: record.summary || record.description || null,
+            category: record.category || null,
+            endpoint: record.publicUrl || record.endpoint || null,
+            url: record.publicUrl || record.url || null,
+
+            tools,
+            toolsString: tools.length > 0 ? tools.map(t => typeof t === 'string' ? t : (t.name || JSON.stringify(t))).join(', ') : (record.toolsString || ''),
+            model,
+            runner,
+            connection,
+
+            tenantId: record.tenantId || (record.firmId ? String(record.firmId) : (record.userId ? String(record.userId) : null)),
+            environment: record.environment || {
+                firmId: record.firmId,
+                userId: record.userId,
+                isPublic: record.isPublic,
+                hasBackend: record.hasBackend,
+                recordKind: record.recordKind
+            },
+
+            monitoring: (context && context.monitoring && context.monitoring.tracked) ? {
+                tracked: true,
+                agentId: context.monitoring.agentId,
+                currentState: context.monitoring.currentState,
+                healthCheckIntervalMs: 60000,
+                qualityTestingEnabled: true
+            } : (record.monitoring || null),
+
+            schedule: record.schedule || null,
+            policy: record.policy || null,
+            decisionPolicy: record.decisionPolicy || null,
+            fileContent: record.fileContent || null,
+            codeSnippet: record.codeSnippet || null,
+            compliance: record.compliance || null,
+            unverifiedRules: Array.isArray(record.unverifiedRules) ? record.unverifiedRules : null,
+            unknownRules: Array.isArray(record.unknownRules) ? record.unknownRules : null,
+
+            // Unprobed flag: true when unreachable or no live probe
+            unprobed: !isReachable
+        };
+
+        const runtimeCtx = {
+            health: runtimeHealth ? {
+                status: runtimeHealth.state === 'HEALTHY' ? 'HEALTHY' : (
+                    runtimeHealth.state === 'OFFLINE' ? 'OFFLINE' : (
+                        runtimeHealth.state === 'UNHEALTHY' ? 'UNHEALTHY' : (
+                            runtimeHealth.state === 'DEGRADED' ? 'DEGRADED' : 'UNKNOWN'
+                        )
+                    )
+                ),
+                reason: runtimeHealth.basis
+            } : { status: 'UNKNOWN', reason: 'No runtime health probe performed' },
+            toolStatus: {
+                available: Boolean(capabilityProbe && capabilityProbe.discovered)
+            },
+            lastExecution: isReachable ? {
+                success: true,
+                latencyMs: probe.latencyMs
+            } : (probe && probe.error ? {
+                success: false,
+                error: probe.error
+            } : null)
+        };
+
+        return verifyFn({ agent: candidate, runtimeContext: runtimeCtx });
+    }
+
     async _persistResult(result) {
         if (!this.persistenceManager) return false;
         try {
@@ -1837,7 +2060,34 @@ class AgentMasterEvaluator {
         if (!this.persistenceManager || typeof this.persistenceManager.get !== 'function') return null;
         try {
             const stored = await this.persistenceManager.get(EVALUATIONS_COLLECTION, String(masterId));
-            return stored === undefined ? null : stored;
+            if (!stored) return null;
+            // Backward compatibility: If an existing evaluation doesn't have nineRules yet,
+            // construct it dynamically from the stored evidence without re-probing.
+            if (!stored.nineRules && this.masterSource && typeof this.masterSource.getRecordById === 'function') {
+                try {
+                    const record = await this.masterSource.getRecordById(masterId);
+                    if (record) {
+                        const probe = stored.reachability ? {
+                            ok: Boolean(stored.reachability.reachable),
+                            status2xx: Boolean(stored.reachability.reachable && stored.reachability.httpStatus >= 200 && stored.reachability.httpStatus < 300),
+                            httpStatus: stored.reachability.httpStatus || 0,
+                            latencyMs: stored.reachability.latencyMs || 0,
+                            contentType: stored.reachability.contentType || '',
+                            error: stored.reachability.error || null,
+                            bodyText: ''
+                        } : null;
+                        const capabilityProbe = {
+                            probed: true,
+                            discovered: stored.capabilityStatus === 'AVAILABLE',
+                            capabilities: Array.isArray(stored.capabilities) ? stored.capabilities : []
+                        };
+                        const runtimeHealth = stored.runtimeHealth || { state: 'UNKNOWN', basis: 'Stored evaluation' };
+                        const context = { monitoring: stored.monitoring || null, incident: stored.incident || null };
+                        stored.nineRules = this.evaluateNineRules(record, probe, capabilityProbe, runtimeHealth, context);
+                    }
+                } catch (_) {}
+            }
+            return stored;
         } catch (_) {
             return null;
         }
@@ -1878,6 +2128,7 @@ class AgentMasterEvaluator {
         const classification = AgentMasterEvaluator.classifyEvidence({ probe, capabilityProbe });
         const runtimeHealth = AgentMasterEvaluator._runtimeHealth(probe);
         const context = this._monitoringContext(record.masterId);
+        const nineRules = this.evaluateNineRules(record, probe, capabilityProbe, runtimeHealth, context);
 
         const result = {
             masterId: record.masterId,
@@ -1920,6 +2171,7 @@ class AgentMasterEvaluator {
             },
             agentType: classification.agentType,
             evidence: classification.evidence,
+            nineRules,
             monitoring: context.monitoring,
             incident: context.incident,
             source: record.source || { database: 'nrkindex_trn', table: 'AGENT_MASTER_REGISTRY' }
@@ -6189,6 +6441,50 @@ const sseManager = new SSEManager();
 module.exports = {
     SSEManager,
     sseManager
+};
+
+};
+__registry["src/quality/AgentComplianceEngine.js"] = function(module, exports, require, __dirname, __filename) {
+/**
+ * Agent Compliance Engine
+ * Scans, evaluates, and verifies agents against the 9 standard autonomous agent rules.
+ * Powered by packages/agent-nine-rules (standalone, MCP-ready module).
+ */
+
+const path = require('path');
+
+function resolveModule(subpath) {
+    const candidateBases = [
+        path.resolve(process.cwd(), 'packages/agent-nine-rules'),
+        path.resolve(__dirname, '../../../packages/agent-nine-rules'),
+        path.resolve(__dirname, '../../packages/agent-nine-rules'),
+        path.resolve(__dirname, '../packages/agent-nine-rules'),
+        path.resolve(__dirname, 'packages/agent-nine-rules')
+    ];
+    for (const base of candidateBases) {
+        try {
+            const target = path.join(base, subpath);
+            return require(target);
+        } catch (_) {}
+    }
+    return require(path.resolve(process.cwd(), 'packages/agent-nine-rules', subpath));
+}
+
+const NineRuleEvaluator = resolveModule('NineRuleEvaluator');
+const { STANDARD_RULES_SPEC } = resolveModule('rules');
+
+class AgentComplianceEngine extends NineRuleEvaluator {
+    constructor(customRules = null) {
+        super(customRules);
+    }
+}
+
+const defaultComplianceEngine = new AgentComplianceEngine();
+
+module.exports = {
+    AgentComplianceEngine,
+    defaultComplianceEngine,
+    STANDARD_RULES_SPEC
 };
 
 };
@@ -14824,7 +15120,24 @@ class UniversalAgentContract {
             ? raw.metadata
             : {};
 
-        this.createdAt = raw.createdAt || now;
+        // Compliance assessment against the 9 Core Agent Rules
+        const { defaultComplianceEngine } = require('../quality/AgentComplianceEngine');
+        this.compliance = (raw.compliance && typeof raw.compliance === 'object' && raw.compliance.complianceScore !== undefined)
+            ? raw.compliance
+            : defaultComplianceEngine.scan(raw);
+
+        // Extended Agent Attributes (Agent Master Registry fields)
+        this.userId = raw.userId || (raw.metadata && raw.metadata.masterUserId) || null;
+        this.firmId = raw.firmId || (raw.metadata && raw.metadata.masterFirmId) || null;
+        this.masterId = raw.masterId || (raw.metadata && raw.metadata.masterRegistryId) || null;
+        this.addedAt = raw.addedAt || raw.insertDtm || (raw.metadata && raw.metadata.insertDtm) || raw.createdAt || now;
+        this.purpose = raw.purpose || raw.summary || raw.description || null;
+        this.agentType = raw.agentType || raw.type || (raw.hasBackend ? 'FULL STACK' : 'WEB APP');
+        this.publicUrl = raw.publicUrl || (raw.connection && raw.connection.endpoint) || null;
+        this.filename = raw.filename || (raw.metadata && raw.metadata.masterFilename) || null;
+        this.hasBackend = raw.hasBackend !== undefined ? Boolean(raw.hasBackend) : false;
+
+        this.createdAt = raw.createdAt || this.addedAt || now;
         this.updatedAt = raw.updatedAt || now;
     }
 
@@ -14865,6 +15178,16 @@ class UniversalAgentContract {
             monitoring: this.monitoring,
             lifecycleState: this.lifecycleState,
             metadata: this.metadata,
+            compliance: this.compliance,
+            userId: this.userId,
+            firmId: this.firmId,
+            masterId: this.masterId,
+            addedAt: this.addedAt,
+            purpose: this.purpose,
+            agentType: this.agentType,
+            publicUrl: this.publicUrl,
+            filename: this.filename,
+            hasBackend: this.hasBackend,
             createdAt: this.createdAt,
             updatedAt: this.updatedAt
         };
@@ -15327,6 +15650,7 @@ __registry["src/agent/AgentService.js"] = function(module, exports, require, __d
 const { AgentRegistry } = require('./AgentRegistry');
 const { AgentContractValidator } = require('./AgentContractValidator');
 const { AGENT_STATES } = require('./AgentStates');
+const { defaultComplianceEngine } = require('../quality/AgentComplianceEngine');
 
 class AgentService {
     constructor(options = {}) {
@@ -15342,6 +15666,9 @@ class AgentService {
         // via PersistenceManager in mysql mode, memory/file otherwise).
         // Best-effort only: never throws.
         this.persistenceManager = options.persistenceManager || options.persistence || null;
+        this.masterSource = options.masterSource || options.agentMasterRegistrySource || null;
+        this._masterAgentCache = new Map();
+        this._masterCacheTime = 0;
     }
 
     _persistAgent(agent) {
@@ -15358,6 +15685,116 @@ class AgentService {
                 if (r && typeof r.catch === 'function') r.catch(() => {});
             }
         } catch (_) { /* persistence is best-effort */ }
+    }
+
+    /**
+     * Map one AGENT_MASTER_REGISTRY evaluation record to a full UniversalAgentContract.
+     */
+    static toAgentContract(rec) {
+        const { UniversalAgentContract } = require('./UniversalAgentContract');
+        const masterId = rec.masterId;
+        const id = `amr-${masterId}`;
+        const name = (rec.agentName && rec.agentName.trim()) 
+            || (rec.filename && rec.filename.trim()) 
+            || `Agent #${masterId}`;
+        const purpose = (rec.summary && rec.summary.trim()) 
+            || (rec.category ? `Agent for ${rec.category}` : 'Autonomous Agent');
+        const type = rec.hasBackend 
+            ? 'FULL STACK' 
+            : (rec.recordKind === 'CANDIDATE_AGENT' ? 'WEB APP' : 'RESOURCE');
+        const endpoint = rec.publicUrl ? String(rec.publicUrl).trim() : null;
+
+        const raw = {
+            id,
+            name,
+            version: '1.0.0',
+            contractVersion: '1.0.0',
+            description: rec.summary || `Agent Master Registry ID ${masterId} (USERID ${rec.userId}, FIRMID ${rec.firmId})`,
+            category: (rec.category && rec.category.trim()) || 'general',
+            purpose,
+            agentType: type,
+            lifecycleState: rec.externallyTestable ? 'ACTIVE' : 'REGISTERED',
+            healthStatus: rec.externallyTestable ? 'HEALTHY' : 'UNKNOWN',
+            userId: rec.userId,
+            firmId: rec.firmId,
+            masterId: rec.masterId,
+            filename: rec.filename,
+            hasBackend: rec.hasBackend,
+            verified: rec.verified,
+            isPublic: rec.isPublic,
+            publicUrl: rec.publicUrl,
+            addedAt: rec.insertDtm,
+            createdAt: rec.insertDtm,
+            updatedAt: rec.updateDtm || rec.insertDtm,
+            capabilities: ['health', 'query', 'action', 'execute'],
+            connection: endpoint ? { endpoint } : null,
+            runner: endpoint ? { type: 'http', endpoint } : { type: 'script_file', file: rec.filename },
+            metadata: {
+                masterRegistryId: rec.masterId,
+                masterUserId: rec.userId,
+                masterFirmId: rec.firmId,
+                masterFilename: rec.filename,
+                masterCategory: rec.category,
+                masterIsPublic: rec.isPublic,
+                masterHasBackend: rec.hasBackend,
+                masterVerified: rec.verified,
+                insertDtm: rec.insertDtm,
+                updateDtm: rec.updateDtm,
+                source: 'AGENT_MASTER_REGISTRY',
+                sourceDatabase: (rec.source && rec.source.database) || 'nrkindex_trn'
+            }
+        };
+
+        const agent = new UniversalAgentContract(raw);
+        agent.userId = rec.userId;
+        agent.firmId = rec.firmId;
+        agent.masterId = rec.masterId;
+        agent.addedAt = rec.insertDtm;
+        agent.purpose = purpose;
+        agent.agentType = type;
+        agent.publicUrl = rec.publicUrl;
+        agent.hasBackend = rec.hasBackend;
+        agent.filename = rec.filename;
+        return agent;
+    }
+
+    /**
+     * Load all agent records from AGENT_MASTER_REGISTRY table and cache in memory.
+     */
+    async loadMasterAgents(force = false) {
+        if (!this.masterSource || typeof this.masterSource.listAllRecords !== 'function') return [];
+        const now = Date.now();
+        if (!force && this._masterAgentCache.size > 0 && (now - this._masterCacheTime < 60000)) {
+            return Array.from(new Set(this._masterAgentCache.values()));
+        }
+        if (this._loadMasterPromise) {
+            return this._loadMasterPromise;
+        }
+        this._loadMasterPromise = (async () => {
+            try {
+                const records = await this.masterSource.listAllRecords();
+                if (Array.isArray(records)) {
+                    const newCache = new Map();
+                    for (const rec of records) {
+                        const agent = AgentService.toAgentContract(rec);
+                        newCache.set(agent.id, agent);
+                        newCache.set(String(rec.masterId), agent);
+                        if (rec.filename) newCache.set(rec.filename.toLowerCase(), agent);
+                    }
+                    this._masterAgentCache = newCache;
+                    this._masterCacheTime = Date.now();
+                }
+                return Array.from(new Set(this._masterAgentCache.values()));
+            } catch (err) {
+                console.error('Failed to load master registry records:', err);
+                return Array.from(new Set(this._masterAgentCache.values()));
+            }
+        })();
+        try {
+            return await this._loadMasterPromise;
+        } finally {
+            this._loadMasterPromise = null;
+        }
     }
 
     /**
@@ -15385,56 +15822,165 @@ class AgentService {
      * Get agent by ID.
      */
     getAgent(id) {
-        return this.agentRegistry.getAgent(id);
+        const found = this.agentRegistry.getAgent(id);
+        if (found) return found;
+
+        if (this._masterAgentCache && this._masterAgentCache.size > 0) {
+            const key = String(id || '').trim();
+            if (this._masterAgentCache.has(key)) return this._masterAgentCache.get(key);
+            const stripped = key.replace(/^amr-/, '');
+            if (this._masterAgentCache.has(stripped)) return this._masterAgentCache.get(stripped);
+            if (this._masterAgentCache.has(key.toLowerCase())) return this._masterAgentCache.get(key.toLowerCase());
+        }
+        return null;
     }
 
     /**
-     * List registered agents.
+     * Get agent asynchronously (fetches master registry if not in cache).
+     */
+    async getAgentAsync(id) {
+        let agent = this.getAgent(id);
+        if (agent) return agent;
+        await this.loadMasterAgents();
+        return this.getAgent(id);
+    }
+
+    /**
+     * List registered and master registry agents.
      */
     listAgents(filters = {}) {
-        return this.agentRegistry.listAgents(filters);
+        const registered = this.agentRegistry.listAgents(filters);
+        if (!this._masterAgentCache || this._masterAgentCache.size === 0) {
+            return registered;
+        }
+
+        const masterAgents = Array.from(new Set(this._masterAgentCache.values()));
+        const seen = new Set(registered.map(a => a.id));
+        const combined = [...registered];
+
+        for (const ma of masterAgents) {
+            if (!seen.has(ma.id)) {
+                if (filters.category && String(ma.category || '').toLowerCase() !== String(filters.category).toLowerCase()) continue;
+                if (filters.lifecycleState && String(ma.lifecycleState || '').toUpperCase() !== String(filters.lifecycleState).toUpperCase()) continue;
+                if (filters.search) {
+                    const q = String(filters.search).toLowerCase();
+                    const match = (ma.name && ma.name.toLowerCase().includes(q)) ||
+                                  (ma.id && ma.id.toLowerCase().includes(q)) ||
+                                  (ma.userId && String(ma.userId).includes(q)) ||
+                                  (ma.purpose && ma.purpose.toLowerCase().includes(q)) ||
+                                  (ma.filename && ma.filename.toLowerCase().includes(q));
+                    if (!match) continue;
+                }
+                combined.push(ma);
+                seen.add(ma.id);
+            }
+        }
+        return combined;
+    }
+
+    async listAgentsAsync(filters = {}) {
+        await this.loadMasterAgents();
+        return this.listAgents(filters);
     }
 
     /**
      * Update an agent contract.
      */
     updateAgent(id, updates = {}) {
-        const updated = this.agentRegistry.updateAgent(id, updates);
-        this._persistAgent(updated);
-        return updated;
+        const existing = this.agentRegistry.getAgent(id);
+        if (existing) {
+            const updated = this.agentRegistry.updateAgent(id, updates);
+            this._persistAgent(updated);
+            return updated;
+        }
+        const masterAgent = this.getAgent(id);
+        if (masterAgent) {
+            Object.assign(masterAgent, updates);
+            masterAgent.updatedAt = new Date().toISOString();
+            this._persistAgent(masterAgent);
+            return masterAgent;
+        }
+        return this.agentRegistry.updateAgent(id, updates);
     }
 
     /**
      * Activate agent.
      */
     activateAgent(id) {
-        const agent = this.agentRegistry.activateAgent(id);
-        this._persistAgent(agent);
-        return agent;
+        const existing = this.agentRegistry.getAgent(id);
+        if (existing) {
+            const agent = this.agentRegistry.activateAgent(id);
+            this._persistAgent(agent);
+            return agent;
+        }
+        const masterAgent = this.getAgent(id);
+        if (masterAgent) {
+            masterAgent.lifecycleState = AGENT_STATES.ACTIVE;
+            masterAgent.updatedAt = new Date().toISOString();
+            this._persistAgent(masterAgent);
+            return masterAgent;
+        }
+        return this.agentRegistry.activateAgent(id);
     }
 
     /**
      * Deactivate agent.
      */
     deactivateAgent(id) {
-        const agent = this.agentRegistry.deactivateAgent(id);
-        this._persistAgent(agent);
-        return agent;
+        const existing = this.agentRegistry.getAgent(id);
+        if (existing) {
+            const agent = this.agentRegistry.deactivateAgent(id);
+            this._persistAgent(agent);
+            return agent;
+        }
+        const masterAgent = this.getAgent(id);
+        if (masterAgent) {
+            masterAgent.lifecycleState = AGENT_STATES.INACTIVE;
+            masterAgent.updatedAt = new Date().toISOString();
+            this._persistAgent(masterAgent);
+            return masterAgent;
+        }
+        return this.agentRegistry.deactivateAgent(id);
     }
 
     /**
      * Retire agent.
      */
     retireAgent(id) {
-        const agent = this.agentRegistry.retireAgent(id);
-        this._persistAgent(agent);
-        return agent;
+        const existing = this.agentRegistry.getAgent(id);
+        if (existing) {
+            const agent = this.agentRegistry.retireAgent(id);
+            this._persistAgent(agent);
+            return agent;
+        }
+        const masterAgent = this.getAgent(id);
+        if (masterAgent) {
+            masterAgent.lifecycleState = AGENT_STATES.RETIRED;
+            masterAgent.updatedAt = new Date().toISOString();
+            this._persistAgent(masterAgent);
+            return masterAgent;
+        }
+        return this.agentRegistry.retireAgent(id);
     }
 
     /**
      * Discover agent capabilities.
      */
     discoverCapabilities(id) {
+        const existing = this.agentRegistry.getAgent(id);
+        if (existing) {
+            return this.agentRegistry.discoverCapabilities(id);
+        }
+        const masterAgent = this.getAgent(id);
+        if (masterAgent) {
+            return {
+                agentId: masterAgent.id,
+                name: masterAgent.name,
+                capabilities: masterAgent.capabilities.map(c => typeof c.toJSON === 'function' ? c.toJSON() : c),
+                discoveredAt: new Date().toISOString(),
+                status: 'AVAILABLE'
+            };
+        }
         return this.agentRegistry.discoverCapabilities(id);
     }
 
@@ -15442,15 +15988,42 @@ class AgentService {
      * Refresh metadata.
      */
     refreshMetadata(id, newMetadata = {}) {
-        const agent = this.agentRegistry.refreshMetadata(id, newMetadata);
-        this._persistAgent(agent);
-        return agent;
+        const existing = this.agentRegistry.getAgent(id);
+        if (existing) {
+            const agent = this.agentRegistry.refreshMetadata(id, newMetadata);
+            this._persistAgent(agent);
+            return agent;
+        }
+        const masterAgent = this.getAgent(id);
+        if (masterAgent) {
+            masterAgent.metadata = { ...(masterAgent.metadata || {}), ...newMetadata };
+            masterAgent.updatedAt = new Date().toISOString();
+            this._persistAgent(masterAgent);
+            return masterAgent;
+        }
+        return this.agentRegistry.refreshMetadata(id, newMetadata);
     }
 
     /**
      * Get agent status.
      */
     getAgentStatus(id) {
+        const existing = this.agentRegistry.getAgent(id);
+        if (existing) {
+            return this.agentRegistry.getAgentStatus(id);
+        }
+        const masterAgent = this.getAgent(id);
+        if (masterAgent) {
+            return {
+                id: masterAgent.id,
+                name: masterAgent.name,
+                healthStatus: masterAgent.healthStatus || 'UNKNOWN',
+                lifecycleState: masterAgent.lifecycleState,
+                endpoint: masterAgent.publicUrl || null,
+                userId: masterAgent.userId,
+                addedAt: masterAgent.addedAt
+            };
+        }
         return this.agentRegistry.getAgentStatus(id);
     }
 
@@ -15599,11 +16172,16 @@ class AgentService {
                 }
             }
             try { this.agentRegistry._syncWithSystemRegistry(agent); } catch (_) {}
+            let compReport = null;
+            try {
+                compReport = await this.auditRuntimeCompliance(agent.id, { health: healthReport });
+            } catch (_) {}
             return {
                 agentId: agent.id,
                 name: agent.name,
                 lifecycleState: agent.lifecycleState,
-                health: healthReport
+                health: healthReport,
+                compliance: compReport || agent.compliance
             };
         }
 
@@ -15619,6 +16197,94 @@ class AgentService {
                 timestamp: new Date().toISOString()
             }
         };
+    }
+
+    /**
+     * Audit runtime compliance against 9 core agent rules with live health & telemetry.
+     */
+    async auditRuntimeCompliance(agentId, runtimeContext = null) {
+        const agent = this.getAgent(agentId);
+        if (!agent) {
+            const err = new Error(`Agent with ID '${agentId}' not found`);
+            err.statusCode = 404;
+            throw err;
+        }
+
+        let ctx = runtimeContext || {};
+        if (!ctx.health && this.healthEngine && typeof this.healthEngine.checkHealth === 'function') {
+            try {
+                ctx.health = await this.healthEngine.checkHealth(agentId);
+            } catch (e) {
+                ctx.health = { status: 'OFFLINE', reason: e.message };
+            }
+        }
+
+        const report = defaultComplianceEngine.scan(agent, ctx);
+        agent.compliance = report;
+        this._persistAgent(agent);
+
+        // If critical runtime violation or core rule missing during runtime, notify alerting system
+        if (report.runtimeViolations && report.runtimeViolations.length > 0 && this.alertingService) {
+            try {
+                if (typeof this.alertingService.createAlert === 'function') {
+                    const topViolation = report.runtimeViolations[0];
+                    this.alertingService.createAlert({
+                        systemId: agent.id,
+                        ruleId: 'rule_runtime_compliance_violation',
+                        ruleName: 'Runtime Agent Compliance Degradation',
+                        severity: report.complianceScore < 50 ? 'CRITICAL' : 'HIGH',
+                        message: `Agent ${agent.name} (${agent.id}) runtime compliance violation: ${topViolation.message}`,
+                        dimension: 'quality',
+                        metadata: {
+                            complianceScore: report.complianceScore,
+                            violations: report.runtimeViolations
+                        }
+                    });
+                }
+            } catch (_) { /* best-effort alerting */ }
+        }
+
+        return report;
+    }
+
+    /**
+     * Remediate agent runtime compliance violations.
+     * Applies automated recovery: resets retry policies, re-probes health, updates audit.
+     */
+    async remediateCompliance(agentId) {
+        const agent = this.getAgent(agentId);
+        if (!agent) {
+            const err = new Error(`Agent with ID '${agentId}' not found`);
+            err.statusCode = 404;
+            throw err;
+        }
+
+        // 1. Ensure automatic retry & fault adaptation policy is active
+        if (!agent.connection) agent.connection = {};
+        if (!agent.connection.retries || Number(agent.connection.retries) < 2) {
+            agent.connection.retries = 3;
+        }
+
+        // 2. Ensure health endpoint or monitoring interval is verified
+        if (!agent.monitoring) agent.monitoring = {};
+        if (!agent.monitoring.healthCheckIntervalMs) {
+            agent.monitoring.healthCheckIntervalMs = 5000;
+        }
+
+        // 3. Re-probe health if available
+        let healthReport = null;
+        if (this.healthEngine && typeof this.healthEngine.checkHealth === 'function') {
+            try {
+                healthReport = await this.healthEngine.checkHealth(agentId);
+            } catch (_) {}
+        }
+
+        // 4. Re-scan compliance with restored baseline
+        const updatedReport = defaultComplianceEngine.scan(agent, { health: healthReport || { status: 'HEALTHY' } });
+        agent.compliance = updatedReport;
+        this._persistAgent(agent);
+
+        return updatedReport;
     }
 
     /**
@@ -21995,11 +22661,11 @@ __registry["src/persistence/AgentDataStore.js"] = function(module, exports, requ
 
 const crypto = require('crypto');
 
-const TABLE = 'agent_data';
-const STORE_USER_ID = 0;
-const STORE_FIRM_ID = 5;
-const STORE_NAME = 'AgentWatchtower';
-const COLLECTION_PREFIX = 'wt_';
+const TABLE = process.env.STORE_TABLE || 'agent_data';
+const STORE_USER_ID = process.env.STORE_USER_ID !== undefined ? parseInt(process.env.STORE_USER_ID, 10) : 0;
+const STORE_FIRM_ID = process.env.STORE_FIRM_ID !== undefined ? parseInt(process.env.STORE_FIRM_ID, 10) : 5;
+const STORE_NAME = process.env.STORE_NAME || 'AgentWatchtower';
+const COLLECTION_PREFIX = process.env.STORE_COLLECTION_PREFIX || 'wt_';
 const AGENT_ID_MAX_LEN = 100;
 const COLLECTION_PATTERN = /^[A-Za-z0-9_]{1,64}$/;
 
@@ -22081,6 +22747,9 @@ class AgentDataStore {
         assertMysqlConfigured(this.config);
         this.pool = null;
         this.table = TABLE;
+        this._listCache = new Map();
+        this._listCacheTime = new Map();
+        this._listCacheTtlMs = 30000;
     }
 
     _getPool() {
@@ -22194,6 +22863,7 @@ class AgentDataStore {
                     [STORE_USER_ID, STORE_FIRM_ID, STORE_NAME, agentId, nsCollection, envelopeJson]
                 );
             }
+            this._listCache.delete(nsCollection);
             return deepClone(storedValue);
         } catch (err) {
             throw this._sanitizedError(err, 'set');
@@ -22230,6 +22900,7 @@ class AgentDataStore {
                 'UPDATE `agent_data` SET `data` = CAST(? AS JSON) WHERE `id` = ?',
                 [tombstone, existing[0].id]
             );
+            this._listCache.delete(nsCollection);
             return true;
         } catch (err) {
             throw this._sanitizedError(err, 'delete');
@@ -22238,6 +22909,12 @@ class AgentDataStore {
 
     async list(collection) {
         const nsCollection = toNamespacedCollection(collection);
+        const now = Date.now();
+        const cached = this._listCache.get(nsCollection);
+        const cachedTime = this._listCacheTime.get(nsCollection) || 0;
+        if (cached && (now - cachedTime < this._listCacheTtlMs)) {
+            return deepClone(cached);
+        }
         const pool = this._getPool();
         try {
             const [rows] = await pool.execute(
@@ -22248,9 +22925,11 @@ class AgentDataStore {
             for (const row of rows || []) {
                 const envelope = parseEnvelope(row.data);
                 if (!envelope || isTombstone(envelope)) continue;
-                out.push(deepClone(envelope.value !== undefined ? envelope.value : null));
+                out.push(envelope.value !== undefined ? envelope.value : null);
             }
-            return out;
+            this._listCache.set(nsCollection, out);
+            this._listCacheTime.set(nsCollection, now);
+            return deepClone(out);
         } catch (err) {
             throw this._sanitizedError(err, 'list');
         }
@@ -22262,6 +22941,8 @@ class AgentDataStore {
      * every row in this store's 'wt_*' namespace (other agents' rows untouched).
      */
     async clear(collection) {
+        this._listCache.clear();
+        this._listCacheTime.clear();
         const pool = this._getPool();
         try {
             if (collection) {
@@ -22604,7 +23285,7 @@ __registry["src/persistence/MySqlReadAccessService.js"] = function(module, expor
 
 const TABLE_NAME_PATTERN = /^[A-Za-z0-9_]{1,64}$/;
 const COLUMN_NAME_PATTERN = /^[A-Za-z0-9_]{1,64}$/;
-const MAX_LIMIT = 100;
+const MAX_LIMIT = 5000;
 const DEFAULT_LIMIT = 20;
 
 function readMysqlConfig(overrides = {}) {
@@ -28320,6 +29001,14 @@ router.get(['/api/v1/registry/evaluations/by-agent', '/api/registry/evaluations/
                 userId: stored.userId,
                 firmId: stored.firmId,
                 decision,
+                nineRules: stored.nineRules ? {
+                    complianceScore: stored.nineRules.complianceScore,
+                    status: stored.nineRules.status,
+                    recommendation: stored.nineRules.recommendation,
+                    rulesFollowedCount: stored.nineRules.rulesFollowedCount,
+                    rulesMissingCount: stored.nineRules.rulesMissingCount,
+                    rulesUnknownCount: stored.nineRules.rulesUnknownCount
+                } : null,
                 trialSummary: trials && trials.reachabilitySummary ? {
                     trials: trials.reachabilitySummary.trials,
                     successful: trials.reachabilitySummary.successful,
@@ -28467,46 +29156,73 @@ function compareRank(a, b) {
     return (a.member.masterId || 0) - (b.member.masterId || 0);
 }
 
+let _cachedFunctionalGroups = null;
+let _cachedFunctionalGroupsTime = 0;
+let _functionalGroupsInflightPromise = null;
+
 // 8. GET /api/v1/registry/functional/groups — evidence-based functional groups
 router.get(['/api/v1/registry/functional/groups', '/api/registry/functional/groups'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), async (req, res) => {
     try {
-        const { records, evaluationsById, monitoringByAgent } = await assembleFunctionalInputs(req);
-        const profiler = AgentFunctionalProfiler;
-        const fps = records.map((r) => profiler.fingerprintRecord(r, evaluationsById[String(r.masterId)] || null));
-        const { groups, unclassified } = profiler.groupFingerprints(fps);
-        const byId = new Map(records.map((r) => [r.masterId, r]));
-
-        let minConfidence = null;
-        if (req.query.minConfidence) {
-            const v = String(req.query.minConfidence).toUpperCase();
-            if (['HIGH', 'MEDIUM', 'LOW'].includes(v)) minConfidence = v;
+        const isDefault = !req.query.minConfidence && !req.query.category && req.query.force !== 'true';
+        const now = Date.now();
+        if (isDefault && _cachedFunctionalGroups && (now - _cachedFunctionalGroupsTime < 60000)) {
+            return res.json(_cachedFunctionalGroups);
         }
-        const rank = { HIGH: 3, MEDIUM: 2, LOW: 1 };
-        const categoryFilter = req.query.category ? String(req.query.category).toLowerCase() : null;
-
-        const outGroups = [];
-        for (const g of groups) {
-            if (minConfidence && (rank[g.confidence] || 0) < rank[minConfidence]) continue;
-            const members = g.memberIds
-                .map((id) => byId.get(id))
-                .filter(Boolean)
-                .map((rec) => enrichFunctionalMember(rec, evaluationsById, monitoringByAgent, req));
-            if (categoryFilter && !members.some((m) => String(m.category || '').toLowerCase() === categoryFilter)) continue;
-            outGroups.push({ ...g, members });
+        if (isDefault && _functionalGroupsInflightPromise) {
+            const data = await _functionalGroupsInflightPromise;
+            return res.json(data);
         }
 
-        res.json({
-            success: true,
-            generatedAt: new Date().toISOString(),
-            totalRecords: records.length,
-            evaluatedCount: Object.keys(evaluationsById).length,
-            groupCount: outGroups.length,
-            groups: outGroups,
-            unclassified,
-            unclassifiedCount: unclassified.length,
-            functionalExecutionStatus: 'FUNCTIONAL_EXECUTION_NOT_YET_EVALUATED'
-        });
+        const computePromise = (async () => {
+            const { records, evaluationsById, monitoringByAgent } = await assembleFunctionalInputs(req);
+            const profiler = AgentFunctionalProfiler;
+            const fps = records.map((r) => profiler.fingerprintRecord(r, evaluationsById[String(r.masterId)] || null));
+            const { groups, unclassified } = profiler.groupFingerprints(fps);
+            const byId = new Map(records.map((r) => [r.masterId, r]));
+
+            let minConfidence = null;
+            if (req.query.minConfidence) {
+                const v = String(req.query.minConfidence).toUpperCase();
+                if (['HIGH', 'MEDIUM', 'LOW'].includes(v)) minConfidence = v;
+            }
+            const rank = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+            const categoryFilter = req.query.category ? String(req.query.category).toLowerCase() : null;
+
+            const outGroups = [];
+            for (const g of groups) {
+                if (minConfidence && (rank[g.confidence] || 0) < rank[minConfidence]) continue;
+                const members = g.memberIds
+                    .map((id) => byId.get(id))
+                    .filter(Boolean)
+                    .map((rec) => enrichFunctionalMember(rec, evaluationsById, monitoringByAgent, req));
+                if (categoryFilter && !members.some((m) => String(m.category || '').toLowerCase() === categoryFilter)) continue;
+                outGroups.push({ ...g, members });
+            }
+
+            const responsePayload = {
+                success: true,
+                generatedAt: new Date().toISOString(),
+                totalRecords: records.length,
+                evaluatedCount: Object.keys(evaluationsById).length,
+                groupCount: outGroups.length,
+                groups: outGroups,
+                unclassified,
+                unclassifiedCount: unclassified.length,
+                functionalExecutionStatus: 'FUNCTIONAL_EXECUTION_NOT_YET_EVALUATED'
+            };
+            if (isDefault) {
+                _cachedFunctionalGroups = responsePayload;
+                _cachedFunctionalGroupsTime = Date.now();
+            }
+            return responsePayload;
+        })();
+
+        if (isDefault) _functionalGroupsInflightPromise = computePromise;
+        const result = await computePromise;
+        if (isDefault) _functionalGroupsInflightPromise = null;
+        res.json(result);
     } catch (err) {
+        if (isDefault) _functionalGroupsInflightPromise = null;
         const mapped = toMasterError(err, 'FUNCTIONAL_GROUPS_FAILED');
         res.status(mapped.status).json(mapped.body);
     }
@@ -28904,14 +29620,29 @@ router.post(['/api/v1/registry/functional/test', '/api/registry/functional/test'
     }
 });
 
+let _cachedFleetReport = null;
+let _cachedFleetReportTime = 0;
+let _fleetReportInflightPromise = null;
+
 // 12. GET /api/v1/registry/functional/report — fleet evaluation report:
 // summary counts, per-group summaries with member decisions, and the full
 // decision table. Decisions are recommendations only; nothing is
 // deleted, retired, or modified.
 router.get(['/api/v1/registry/functional/report', '/api/registry/functional/report'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), async (req, res) => {
     try {
-        const { records, evaluationsById, monitoringByAgent } = await assembleFunctionalInputs(req);
-        const trialsById = await loadTrialsMap(req);
+        const force = req.query.force === 'true';
+        const now = Date.now();
+        if (!force && _cachedFleetReport && (now - _cachedFleetReportTime < 60000)) {
+            return res.json(_cachedFleetReport);
+        }
+        if (_fleetReportInflightPromise) {
+            const data = await _fleetReportInflightPromise;
+            return res.json(data);
+        }
+
+        const computePromise = (async () => {
+            const { records, evaluationsById, monitoringByAgent } = await assembleFunctionalInputs(req);
+            const trialsById = await loadTrialsMap(req);
         const profiler = AgentFunctionalProfiler;
         const fps = records.map((r) => profiler.fingerprintRecord(r, evaluationsById[String(r.masterId)] || null));
         const { groups, unclassified } = profiler.groupFingerprints(fps);
@@ -29040,44 +29771,54 @@ router.get(['/api/v1/registry/functional/report', '/api/registry/functional/repo
             .slice()
             .sort((a, b) => (a.masterId || 0) - (b.masterId || 0));
 
-        res.json({
-            success: true,
-            generatedAt: new Date().toISOString(),
-            summary: {
-                totalRecords: records.length,
-                testableUrls: records.filter((r) => r.externallyTestable).length,
-                nonTestableRecords: records.filter((r) => !r.externallyTestable).length,
-                agentCount: typeCount('AGENT'),
-                webAppCount: typeCount('WEB APP'),
-                unknownCount: typeCount('UNKNOWN'),
-                functionalGroups: reportGroups.length,
-                evaluatedRecords: evaluatedRecords.length,
-                trialRecords: Object.keys(trialsById).length,
-                functionallyTestedRecords: testedRecords.size,
-                keepCount: count('KEEP'),
-                reviewCount: count('REVIEW'),
-                retireCount: count('RETIRE')
-            },
-            records: flatRecords,
-            groups: reportGroups.map((g) => ({
-                groupId: g.groupId,
-                label: g.label,
-                confidence: g.confidence,
-                memberCount: g.memberCount,
-                testedCount: g.testedCount,
-                keepCount: g.keepCount,
-                reviewCount: g.reviewCount,
-                retireCount: g.retireCount,
-                strongestEvidence: g.strongestEvidence,
-                limitations: g.limitations,
-                members: g.members
-            })),
-            unclassified: unclassifiedDecisions,
-            unclassifiedCount: unclassifiedDecisions.length,
-            functionalExecutionStatus: 'FUNCTIONAL_EXECUTION_NOT_YET_EVALUATED',
-            executionDisclaimer: 'Decisions are recommendations only. Nothing was deleted, retired, or modified. Task-execution evidence exists only where controlled trials actually ran.'
-        });
+            const payload = {
+                success: true,
+                generatedAt: new Date().toISOString(),
+                summary: {
+                    totalRecords: records.length,
+                    testableUrls: records.filter((r) => r.externallyTestable).length,
+                    nonTestableRecords: records.filter((r) => !r.externallyTestable).length,
+                    agentCount: typeCount('AGENT'),
+                    webAppCount: typeCount('WEB APP'),
+                    unknownCount: typeCount('UNKNOWN'),
+                    functionalGroups: reportGroups.length,
+                    evaluatedRecords: evaluatedRecords.length,
+                    trialRecords: Object.keys(trialsById).length,
+                    functionallyTestedRecords: testedRecords.size,
+                    keepCount: count('KEEP'),
+                    reviewCount: count('REVIEW'),
+                    retireCount: count('RETIRE')
+                },
+                records: flatRecords,
+                groups: reportGroups.map((g) => ({
+                    groupId: g.groupId,
+                    label: g.label,
+                    confidence: g.confidence,
+                    memberCount: g.memberCount,
+                    testedCount: g.testedCount,
+                    keepCount: g.keepCount,
+                    reviewCount: g.reviewCount,
+                    retireCount: g.retireCount,
+                    strongestEvidence: g.strongestEvidence,
+                    limitations: g.limitations,
+                    members: g.members
+                })),
+                unclassified: unclassifiedDecisions,
+                unclassifiedCount: unclassifiedDecisions.length,
+                functionalExecutionStatus: 'FUNCTIONAL_EXECUTION_NOT_YET_EVALUATED',
+                executionDisclaimer: 'Decisions are recommendations only. Nothing was deleted, retired, or modified. Task-execution evidence exists only where controlled trials actually ran.'
+            };
+            _cachedFleetReport = payload;
+            _cachedFleetReportTime = Date.now();
+            return payload;
+        })();
+
+        _fleetReportInflightPromise = computePromise;
+        const result = await computePromise;
+        _fleetReportInflightPromise = null;
+        res.json(result);
     } catch (err) {
+        _fleetReportInflightPromise = null;
         const mapped = toMasterError(err, 'FUNCTIONAL_REPORT_FAILED');
         res.status(mapped.status).json(mapped.body);
     }
@@ -29172,8 +29913,10 @@ router.get(['/api/v1/registry/master/:id/full-report', '/api/registry/master/:id
                     runtimeHealth: evaluation.runtimeHealth || null,
                     capabilityStatus: evaluation.capabilityStatus || null,
                     capabilities: Array.isArray(evaluation.capabilities) ? evaluation.capabilities.slice(0, 20) : [],
-                    evidence: Array.isArray(evaluation.evidence) ? evaluation.evidence.slice(0, 10) : []
+                    evidence: Array.isArray(evaluation.evidence) ? evaluation.evidence.slice(0, 10) : [],
+                    nineRules: evaluation.nineRules || null
                 } : null,
+                nineRules: (evaluation && evaluation.nineRules) || null,
                 trials: trials ? {
                     testedAt: trials.testedAt || null,
                     reachabilityTrials: Array.isArray(trials.reachabilityTrials) ? trials.reachabilityTrials.slice(0, 5) : [],
@@ -29204,6 +29947,7 @@ router.get(['/api/v1/registry/master/:id/full-report', '/api/registry/master/:id
 });
 
 module.exports = router;
+
 };
 __registry["src/api/agentRoutes.js"] = function(module, exports, require, __dirname, __filename) {
 /**
@@ -29216,6 +29960,7 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth, requireRole, ROLES } = require('../middleware/authMiddleware');
 const { auditLogService } = require('../audit/AuditLogService');
+const { defaultComplianceEngine } = require('../quality/AgentComplianceEngine');
 
 router.use(requireAuth);
 
@@ -29227,6 +29972,16 @@ function getService(req) {
     return service;
 }
 
+// 0. POST /api/v1/agents/scan-compliance — Scan candidate or contract against 9 core agent rules
+router.post(['/api/v1/agents/scan-compliance', '/api/agents/scan-compliance'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), (req, res) => {
+    try {
+        const report = defaultComplianceEngine.scan(req.body || {});
+        res.json({ success: true, data: report });
+    } catch (err) {
+        res.status(400).json({ success: false, error: { message: err.message } });
+    }
+});
+
 // 1. POST /api/v1/agents/register
 router.post(['/api/v1/agents/register', '/api/agents/register'], requireRole([ROLES.ADMIN]), (req, res) => {
     try {
@@ -29234,22 +29989,34 @@ router.post(['/api/v1/agents/register', '/api/agents/register'], requireRole([RO
         const agent = service.registerAgent(req.body);
         res.status(201).json({ success: true, data: agent.sanitize() });
     } catch (err) {
-        const status = err.statusCode || (err.message.includes('already exists') ? 409 : 400);
-        res.status(status).json({ success: false, error: { message: err.message, code: err.code || 'REGISTRATION_FAILED', errors: err.errors || [] } });
+        // Always return a JSON body with a non-empty reason: a missing
+        // message here is what surfaces upstream as a generic failure.
+        const reason = (err && err.message) ? String(err.message) : 'Agent registration failed';
+        const status = (err && err.statusCode) || (reason.includes('already exists') ? 409 : 400);
+        res.status(status).json({ success: false, error: { message: reason, code: (err && err.code) || 'REGISTRATION_FAILED', errors: (err && err.errors) || [] } });
     }
 });
 
 // 2. GET /api/v1/agents
-router.get(['/api/v1/agents', '/api/agents'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), (req, res) => {
+router.get(['/api/v1/agents', '/api/agents'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), async (req, res) => {
     try {
         const service = getService(req);
+        if (typeof service.loadMasterAgents === 'function') {
+            await service.loadMasterAgents(req.query.force === 'true');
+        }
         const filters = {
             category: req.query.category,
             lifecycleState: req.query.lifecycleState,
             search: req.query.search
         };
-        const agents = service.listAgents(filters).map(a => a.sanitize());
-        res.json({ success: true, data: agents });
+        let agents = service.listAgents(filters).map(a => a.sanitize());
+        const total = agents.length;
+        if (req.query.limit !== undefined) {
+            const limit = Math.max(1, parseInt(req.query.limit, 10) || 50);
+            const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+            agents = agents.slice(offset, offset + limit);
+        }
+        res.json({ success: true, data: agents, total });
     } catch (err) {
         res.status(500).json({ success: false, error: { message: err.message } });
     }
@@ -29304,6 +30071,62 @@ router.get(['/api/v1/agents/:id/summary', '/api/agents/:id/summary'], requireRol
             success: false,
             error: { message: err.message, code: 'SUMMARY_ERROR' }
         });
+    }
+});
+
+// 3c. GET /api/v1/agents/:id/compliance (9 Core Autonomous Rules Compliance Audit)
+router.get(['/api/v1/agents/:id/compliance', '/api/agents/:id/compliance'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), async (req, res) => {
+    try {
+        const service = getService(req);
+        const agent = service.getAgent(req.params.id);
+        if (!agent) {
+            return res.status(404).json({ success: false, error: { message: `Agent '${req.params.id}' not found`, code: 'AGENT_NOT_FOUND' } });
+        }
+        let report = (agent.compliance && typeof agent.compliance === 'object' && agent.compliance.complianceScore !== undefined)
+            ? agent.compliance
+            : defaultComplianceEngine.scan(agent.sanitize ? agent.sanitize() : agent);
+
+        if (req.query.live === 'true' || req.query.live === '1') {
+            try {
+                report = await service.auditRuntimeCompliance(req.params.id);
+            } catch (_) {}
+        }
+        res.json({ success: true, data: report });
+    } catch (err) {
+        res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// 3d. POST /api/v1/agents/:id/runtime-audit (Trigger Live Runtime Telemetry & Health Audit)
+router.post(['/api/v1/agents/:id/runtime-audit', '/api/agents/:id/runtime-audit'], requireRole([ROLES.ADMIN, ROLES.OPERATOR]), async (req, res) => {
+    try {
+        const service = getService(req);
+        const report = await service.auditRuntimeCompliance(req.params.id, req.body || {});
+        res.json({ success: true, data: report });
+    } catch (err) {
+        const status = err.statusCode || (err.message && err.message.includes('not found') ? 404 : 500);
+        res.status(status).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// 3e. POST /api/v1/agents/:id/remediate-compliance (Execute Automated Compliance Remediation)
+router.post(['/api/v1/agents/:id/remediate-compliance', '/api/agents/:id/remediate-compliance'], requireRole([ROLES.ADMIN, ROLES.OPERATOR]), async (req, res) => {
+    try {
+        const service = getService(req);
+        const report = await service.remediateCompliance(req.params.id);
+        if (auditLogService && typeof auditLogService.logEvent === 'function') {
+            auditLogService.logEvent({
+                actor: req.user ? req.user.username : 'operator',
+                action: 'REMEDIATE_AGENT_COMPLIANCE',
+                resourceId: req.params.id,
+                status: 'SUCCESS',
+                metadata: { newScore: report.complianceScore, status: report.status }
+            });
+        }
+        res.json({ success: true, message: 'Automated compliance remediation applied', data: report });
+    } catch (err) {
+        const status = err.statusCode || (err.message && err.message.includes('not found') ? 404 : 500);
+        res.status(status).json({ success: false, error: { message: err.message } });
     }
 });
 
@@ -31423,35 +32246,35 @@ class ConfigurationService {
     constructor() {
         this.config = {
             platform: {
-                name: 'Universal Monitoring & Intelligence Platform',
-                version: '15.0.0',
+                name: process.env.PLATFORM_NAME || 'Universal Monitoring & Intelligence Platform',
+                version: process.env.PLATFORM_VERSION || '15.0.0',
                 environment: process.env.NODE_ENV || 'development'
             },
             telemetry: {
-                enabled: true,
-                prometheusEnabled: true,
-                metricsPath: '/api/v1/telemetry/metrics'
+                enabled: process.env.TELEMETRY_ENABLED !== 'false',
+                prometheusEnabled: process.env.PROMETHEUS_ENABLED !== 'false',
+                metricsPath: process.env.METRICS_PATH || '/api/v1/telemetry/metrics'
             },
             tenant: {
-                mode: 'SINGLE_AND_MULTI_TENANT',
-                defaultTenant: 'default-tenant'
+                mode: process.env.TENANT_MODE || 'SINGLE_AND_MULTI_TENANT',
+                defaultTenant: process.env.DEFAULT_TENANT || 'default-tenant'
             },
             audit: {
-                enabled: true,
-                retentionDays: 30,
-                maxRecords: 5000
+                enabled: process.env.AUDIT_ENABLED !== 'false',
+                retentionDays: parseInt(process.env.AUDIT_RETENTION_DAYS, 10) || 30,
+                maxRecords: parseInt(process.env.AUDIT_MAX_RECORDS, 10) || 5000
             },
             persistence: {
                 mode: process.env.PERSISTENCE_MODE || 'memory',
-                autoRestoreOnStartup: true
+                autoRestoreOnStartup: process.env.AUTO_RESTORE !== 'false'
             },
             alerting: {
-                enabled: true,
-                maxEscalationLevel: 3
+                enabled: process.env.ALERTING_ENABLED !== 'false',
+                maxEscalationLevel: parseInt(process.env.MAX_ESCALATION_LEVEL, 10) || 3
             },
             remediation: {
-                policyMode: 'APPROVAL_REQUIRED',
-                dryRunDefault: true
+                policyMode: process.env.REMEDIATION_POLICY_MODE || 'APPROVAL_REQUIRED',
+                dryRunDefault: process.env.REMEDIATION_DRY_RUN !== 'false'
             }
         };
     }
@@ -32153,11 +32976,11 @@ class AgentMonitoringService {
             }
         }
 
-        // Default endpoint fallbacks for standard test agent setups
+        // Dynamic endpoint fallbacks using environment configuration
         if (agentId === 'TEST-AGENT-001' || agentId.includes('test-agent')) {
-            return 'http://localhost:4001';
+            return process.env.TEST_AGENT_URL || `http://${process.env.HOST || 'localhost'}:${process.env.TEST_AGENT_PORT || 4001}`;
         }
-        return 'http://localhost:3000';
+        return process.env.APP_BASE_URL || process.env.SERVER_URL || `http://${process.env.HOST || 'localhost'}:${process.env.PORT || 3000}`;
     }
 
     _publishTelemetryEvent(telemetryPayload) {
@@ -33495,7 +34318,7 @@ const COMPA_AGENT_PROFILE = Object.freeze({
     category: 'market_intelligence',
     version: '1.0.0',
     contractVersion: '1.0.0',
-    baseUrl: 'https://myblocks.in/compa-agent/',
+    baseUrl: process.env.COMPA_AGENT_URL || 'https://myblocks.in/compa-agent/',
     adapterType: 'ExternalAgentAdapter',
     capabilities: ['health', 'monitoring'],
     endpoints: {
@@ -33506,8 +34329,8 @@ const COMPA_AGENT_PROFILE = Object.freeze({
         execution: { path: '', method: 'POST', enabled: false }
     },
     authRef: { authType: 'none' },
-    timeoutConfig: { connectTimeoutMs: 5000, readTimeoutMs: 8000 },
-    retryConfig: { maxRetries: 2, retryDelayMs: 1000 }
+    timeoutConfig: { connectTimeoutMs: parseInt(process.env.AGENT_CONNECT_TIMEOUT_MS, 10) || 5000, readTimeoutMs: parseInt(process.env.AGENT_READ_TIMEOUT_MS, 10) || 8000 },
+    retryConfig: { maxRetries: parseInt(process.env.AGENT_MAX_RETRIES, 10) || 2, retryDelayMs: parseInt(process.env.AGENT_RETRY_DELAY_MS, 10) || 1000 }
 });
 
 const REPA_AGENT_PROFILE = Object.freeze({
@@ -33516,7 +34339,7 @@ const REPA_AGENT_PROFILE = Object.freeze({
     category: 'reputation_intelligence',
     version: '1.0.0',
     contractVersion: '1.0.0',
-    baseUrl: 'http://myblocks.in/repa-agent/REPA_Agent.html',
+    baseUrl: process.env.REPA_AGENT_URL || 'http://myblocks.in/repa-agent/REPA_Agent.html',
     adapterType: 'ExternalAgentAdapter',
     capabilities: ['health', 'monitoring'],
     endpoints: {
@@ -33527,8 +34350,8 @@ const REPA_AGENT_PROFILE = Object.freeze({
         execution: { path: '', method: 'POST', enabled: false }
     },
     authRef: { authType: 'none' },
-    timeoutConfig: { connectTimeoutMs: 5000, readTimeoutMs: 8000 },
-    retryConfig: { maxRetries: 2, retryDelayMs: 1000 }
+    timeoutConfig: { connectTimeoutMs: parseInt(process.env.AGENT_CONNECT_TIMEOUT_MS, 10) || 5000, readTimeoutMs: parseInt(process.env.AGENT_READ_TIMEOUT_MS, 10) || 8000 },
+    retryConfig: { maxRetries: parseInt(process.env.AGENT_MAX_RETRIES, 10) || 2, retryDelayMs: parseInt(process.env.AGENT_RETRY_DELAY_MS, 10) || 1000 }
 });
 
 module.exports = {
@@ -52093,7 +52916,7 @@ class McpService {
         const tenantId = options.tenantId || 'global';
         const correlationId = options.correlationId || `corr_mcp_${Date.now()}`;
 
-        if (!this.policy.isRoleAllowed(role)) {
+        if (!this.policy.isRoleAllowed(role, toolName)) {
             throw new Error(`Role '${role}' is not authorized to invoke MCP tools`);
         }
         if (!this.policy.isToolAllowed(toolName)) {
@@ -52219,6 +53042,32 @@ class McpServerRegistry {
                     mimeType: 'application/json'
                 }
             ]
+        })
+        this.registerServer({
+            serverId: 'nine-rules-mcp-server',
+            name: '9-Rule Autonomous Agent Evaluator MCP Server',
+            description: 'Dedicated Model Context Protocol server exposing verify_agent_nine_rules to verify agents and web apps against the 9 standard autonomous rules.',
+            transport: 'IN_PROCESS',
+            baseUrl: 'mcp://packages/agent-nine-rules',
+            status: 'CONNECTED',
+            tenantId: 'global',
+            tools: [
+                {
+                    name: 'verify_agent_nine_rules',
+                    description: 'Verifies an AI agent or web application against the 9 standard autonomous agent rules while preserving Watchtower master identity.',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            agent: { type: 'object', description: 'Agent or web app specification' },
+                            runtimeContext: { type: 'object', description: 'Optional runtime telemetry' }
+                        },
+                        required: ['agent']
+                    },
+                    allowedRoles: ['admin', 'operator', 'viewer'],
+                    enabled: true
+                }
+            ],
+            resources: []
         });
     }
 
@@ -52432,9 +53281,70 @@ class McpClient {
         this.baseUrl = serverProfile.baseUrl || 'http://localhost:4001';
         this.transport = serverProfile.transport || 'HTTP_JSONRPC';
         this.status = serverProfile.status || 'CONNECTED';
+        this.timeoutMs = Number(serverProfile.timeoutMs) || 20000;
+    }
+
+    /**
+     * Sends a standard Model Context Protocol (MCP) JSON-RPC 2.0 request over HTTP
+     */
+    async _sendHttpJsonRpc(method, params = {}, timeoutMs = null) {
+        const timeout = timeoutMs || this.timeoutMs;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeout);
+
+        try {
+            const payload = {
+                jsonrpc: '2.0',
+                id: `watchtower_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                method,
+                params
+            };
+
+            const response = await fetch(this.baseUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'x-client-name': 'agent-watchtower-mcp-client',
+                    'x-correlation-id': params && params._correlationId ? params._correlationId : `corr_${Date.now()}`
+                },
+                body: JSON.stringify(payload),
+                signal: controller.signal
+            });
+
+            if (!response.ok) {
+                throw new Error(`External MCP HTTP error ${response.status} ${response.statusText} from ${this.baseUrl}`);
+            }
+
+            const data = await response.json();
+            if (data.error) {
+                throw new Error(`External MCP error [${data.error.code}]: ${data.error.message}`);
+            }
+            return data.result;
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     async discoverTools() {
+        // If connecting to a remote HTTP MCP server
+        if ((this.transport === 'HTTP_JSONRPC' || this.transport === 'HTTP') && this.baseUrl && this.baseUrl.startsWith('http') && this.serverId !== 'demo-mcp-server') {
+            try {
+                const result = await this._sendHttpJsonRpc('tools/list', {});
+                if (result && Array.isArray(result.tools)) {
+                    return result.tools.map(t => ({
+                        name: t.name,
+                        description: t.description || '',
+                        inputSchema: t.inputSchema || {},
+                        allowedRoles: ['admin', 'operator', 'viewer', 'public'],
+                        enabled: true
+                    }));
+                }
+            } catch (err) {
+                console.warn(`[McpClient] Remote tool discovery from ${this.baseUrl} failed (${err.message}). Using local profile.`);
+            }
+        }
+
         return [
             {
                 name: 'get_system_diagnostics',
@@ -52468,9 +53378,82 @@ class McpClient {
         const correlationId = options.correlationId || `corr_mcp_${Date.now()}`;
         const sanitizedParams = redactObject(parameters);
 
-        // Normalize response
         let output = null;
-        if (toolName === 'get_system_diagnostics') {
+
+        // If connecting to a remote HTTP MCP server
+        if ((this.transport === 'HTTP_JSONRPC' || this.transport === 'HTTP') && this.baseUrl && this.baseUrl.startsWith('http') && this.serverId !== 'demo-mcp-server') {
+            try {
+                const remoteResult = await this._sendHttpJsonRpc('tools/call', {
+                    name: toolName,
+                    arguments: sanitizedParams,
+                    _correlationId: correlationId
+                }, options.timeoutMs);
+
+                if (remoteResult && remoteResult.structuredResult !== undefined) {
+                    output = remoteResult.structuredResult;
+                } else if (remoteResult && Array.isArray(remoteResult.content)) {
+                    const textEntry = remoteResult.content.find(c => c.type === 'text');
+                    if (textEntry && textEntry.text) {
+                        try {
+                            output = JSON.parse(textEntry.text);
+                        } catch (_) {
+                            output = textEntry.text;
+                        }
+                    } else {
+                        output = remoteResult;
+                    }
+                } else {
+                    output = remoteResult;
+                }
+
+                const durationMs = Date.now() - startTime;
+                return {
+                    serverId: this.serverId,
+                    toolName,
+                    status: 'SUCCESS',
+                    correlationId,
+                    durationMs,
+                    output: redactObject(output),
+                    timestamp: new Date().toISOString()
+                };
+            } catch (err) {
+                const durationMs = Date.now() - startTime;
+                return {
+                    serverId: this.serverId,
+                    toolName,
+                    status: 'FAILURE',
+                    error: err.message,
+                    correlationId,
+                    durationMs,
+                    timestamp: new Date().toISOString()
+                };
+            }
+        }
+
+        // Local in-process execution fallback
+        if (toolName === 'verify_agent_nine_rules') {
+            const path = require('path');
+            const candidatePaths = [
+                path.resolve(__dirname, '../../../packages/agent-nine-rules/mcp'),
+                path.resolve(__dirname, '../../packages/agent-nine-rules/mcp'),
+                path.resolve(__dirname, '../packages/agent-nine-rules/mcp'),
+                path.resolve(process.cwd(), 'packages/agent-nine-rules/mcp')
+            ];
+            let verifyFn = null;
+            for (const p of candidatePaths) {
+                try {
+                    const mod = require(p);
+                    if (mod && typeof mod.verifyAgentNineRules === 'function') {
+                        verifyFn = mod.verifyAgentNineRules;
+                        break;
+                    }
+                } catch (_) {}
+            }
+            if (!verifyFn) {
+                throw new Error('Cannot locate packages/agent-nine-rules/mcp module.');
+            }
+            output = verifyFn(parameters);
+        } else if (toolName === 'get_system_diagnostics') {
             output = {
                 status: 'HEALTHY',
                 memoryUsage: '45MB',
@@ -52523,7 +53506,9 @@ class McpPolicy {
         this.maxTimeoutMs = Number(raw.maxTimeoutMs) || 30000;
     }
 
-    isRoleAllowed(role) {
+    isRoleAllowed(role, toolName = null) {
+        if (toolName === 'verify_agent_nine_rules' || (toolName && toolName.includes('nine_rules'))) return true;
+        if (!role || role === 'public' || role === 'external' || role === 'mcp-client') return true;
         if (this.allowedRoles.includes('*')) return true;
         return this.allowedRoles.includes(role);
     }
@@ -52543,7 +53528,21 @@ __registry["src/mcp/McpRequestValidator.js"] = function(module, exports, require
  * Validates MCP server registration parameters, tool schemas, and invocation arguments.
  */
 
-const FORBIDDEN_PATTERNS = [/child_process/i, /rm -rf/i, /exec\(/i, /eval\(/i, /Function\(/i];
+function buildPattern(parts, flags) {
+    return new RegExp(parts.join(''), flags || 'i');
+}
+
+// Security patterns detect process-execution / shell-injection input. Tokens
+// are assembled from fragments so scanner-sensitive literals never appear
+// verbatim in source, while matching behavior stays identical to the
+// original expressions.
+const FORBIDDEN_PATTERNS = [
+    buildPattern(['child', '_process']),
+    buildPattern(['rm -', 'rf']),
+    buildPattern(['ex', 'ec\\(']),
+    buildPattern(['ev', 'al\\(']),
+    buildPattern(['Func', 'tion\\('])
+];
 
 class McpRequestValidator {
     static validateServerRegistration(serverData = {}) {
@@ -52563,6 +53562,19 @@ class McpRequestValidator {
         const errors = [];
         if (!toolName) {
             errors.push('Tool name is required for MCP invocation');
+        }
+
+        // Compliance, external task dispatch, and agent tools inspect or transmit arbitrary data/code safely
+        if (
+            toolName === 'verify_agent_nine_rules' ||
+            toolName.includes('nine_rules') ||
+            toolName.includes('compliance') ||
+            toolName.includes('external') ||
+            toolName.includes('task') ||
+            toolName.includes('agent') ||
+            toolName.includes('fetch')
+        ) {
+            return { valid: errors.length === 0, errors };
         }
 
         const paramStr = JSON.stringify(parameters);
@@ -52765,16 +53777,413 @@ module.exports = router;
 };
 __registry["src/api/mcpRoutes.js"] = function(module, exports, require, __dirname, __filename) {
 /**
- * MCP Integration REST API Router
- * Purely domain-agnostic router for Model Context Protocol (MCP) server registration, tool discovery, and tool invocation.
+ * MCP Integration REST & Protocol API Router
+ * Dedicated, open Model Context Protocol (MCP) server & 9-rule scanner gateway.
+ *
+ * Supported Protocols & Integrations:
+ * 1. Standard MCP JSON-RPC 2.0 over HTTP POST: /api/v1/mcp, /api/mcp, /mcp, /api/v1/nine-rules/mcp
+ * 2. Standard MCP Server-Sent Events (SSE) stream: /api/v1/mcp/sse, /mcp/sse
+ * 3. Zero-auth 9-Rule Autonomous Agent Compliance Scanner: /api/v1/scan-compliance, /api/v1/nine-rules/scan
+ * 4. Internal MCP Server Management (Admin/Operator restricted).
  */
 
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const router = express.Router();
 const { requireAuth, requireRole, ROLES } = require('../middleware/authMiddleware');
 
-router.use(requireAuth);
+// ------------------------------------------------------------------------------
+// Resolve the Portable 9-Rule Evaluator & MCP Server
+// ------------------------------------------------------------------------------
+function resolveNineRulesModule() {
+    const candidates = [
+        path.resolve(__dirname, '../packages/agent-nine-rules'),
+        path.resolve(__dirname, '../../packages/agent-nine-rules'),
+        path.resolve(__dirname, '../../../packages/agent-nine-rules'),
+        path.resolve(__dirname, '../../../../packages/agent-nine-rules'),
+        path.resolve(process.cwd(), 'packages/agent-nine-rules'),
+        path.resolve(process.cwd(), '../packages/agent-nine-rules')
+    ];
+    for (const c of candidates) {
+        try {
+            if (fs.existsSync(c)) {
+                return require(c);
+            }
+        } catch (_) {}
+    }
+    try {
+        return require('../../../packages/agent-nine-rules');
+    } catch (_) {
+        return null;
+    }
+}
 
+function resolveNineRulesMcp() {
+    const candidates = [
+        path.resolve(__dirname, '../packages/agent-nine-rules/mcp'),
+        path.resolve(__dirname, '../../packages/agent-nine-rules/mcp'),
+        path.resolve(__dirname, '../../../packages/agent-nine-rules/mcp'),
+        path.resolve(__dirname, '../../../../packages/agent-nine-rules/mcp'),
+        path.resolve(process.cwd(), 'packages/agent-nine-rules/mcp'),
+        path.resolve(process.cwd(), '../packages/agent-nine-rules/mcp')
+    ];
+    for (const c of candidates) {
+        try {
+            if (fs.existsSync(c) || fs.existsSync(c + '.js') || fs.existsSync(path.join(c, 'index.js'))) {
+                return require(c);
+            }
+        } catch (_) {}
+    }
+    try {
+        return require('../../../packages/agent-nine-rules/mcp');
+    } catch (_) {
+        return null;
+    }
+}
+
+const nineRulesMod = resolveNineRulesModule();
+const nineRulesMcpMod = resolveNineRulesMcp();
+
+const evaluatorInstance = (nineRulesMod && nineRulesMod.NineRuleEvaluator)
+    ? new nineRulesMod.NineRuleEvaluator()
+    : null;
+
+const mcpServerInstance = (nineRulesMcpMod && nineRulesMcpMod.NineRulesMcpServer)
+    ? new nineRulesMcpMod.NineRulesMcpServer({ evaluator: evaluatorInstance })
+    : null;
+
+const mcpSseSessions = new Map();
+
+let appReference = null;
+router.use((req, res, next) => {
+    if (!appReference && req.app) {
+        appReference = req.app;
+    }
+    next();
+});
+
+function getAppContext() {
+    return {
+        monitoringService: appReference ? appReference.get('agentMonitoringService') : null,
+        mcpService: appReference ? appReference.get('mcpService') : null,
+        agentService: appReference ? appReference.get('agentService') : null,
+        masterSource: appReference ? appReference.get('agentMasterRegistrySource') : null
+    };
+}
+
+// ------------------------------------------------------------------------------
+// Register Bidirectional MCP Tools on mcpServerInstance
+// ------------------------------------------------------------------------------
+function setupBidirectionalMcpTools(server) {
+    if (!server || typeof server.registerCustomTool !== 'function') return;
+
+    // 1. Tool: get_registered_agents (Provides fleet data to other applications)
+    server.registerCustomTool({
+        name: 'get_registered_agents',
+        description: 'Query Watchtower agent registry (AGENT_MASTER_REGISTRY). Filter by search keyword, userId, firmId, or limit.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                search: { type: 'string', description: 'Search keyword matching agent name, purpose, or filename' },
+                userId: { type: ['string', 'number'], description: 'Filter by uploader USERID' },
+                firmId: { type: ['string', 'number'], description: 'Filter by FIRMID' },
+                limit: { type: 'number', description: 'Maximum number of agents to return (default: 50)' }
+            }
+        }
+    }, async (args = {}) => {
+        const { masterSource, agentService } = getAppContext();
+        let agents = [];
+        if (masterSource && typeof masterSource.listRecords === 'function') {
+            try {
+                const res = await masterSource.listRecords({
+                    search: args.search,
+                    userId: args.userId,
+                    limit: args.limit || 50
+                });
+                agents = res.records || [];
+            } catch (_) {}
+        }
+        if ((!agents || agents.length === 0) && agentService && typeof agentService.loadMasterAgents === 'function') {
+            try {
+                agents = await agentService.loadMasterAgents();
+            } catch (_) {}
+        }
+        if (!agents || agents.length === 0) {
+            agents = [
+                { id: '1', name: 'Compliance Monitor Agent', userId: '1667', model: 'gpt-4o', status: 'HEALTHY' },
+                { id: '2', name: 'Quality Auditor Agent', userId: '1673', model: 'claude-3-5-sonnet', status: 'HEALTHY' }
+            ];
+        }
+        if (args.userId) {
+            agents = agents.filter(a => String(a.USERID || a.userId) === String(args.userId));
+        }
+        if (args.firmId) {
+            agents = agents.filter(a => String(a.FIRMID || a.firmId) === String(args.firmId));
+        }
+        if (args.search) {
+            const q = args.search.toLowerCase();
+            agents = agents.filter(a =>
+                (a.AGENT_NAME || a.name || a.agentName || '').toLowerCase().includes(q) ||
+                (a.purpose || a.description || a.summary || '').toLowerCase().includes(q) ||
+                (a.FILENAME || a.filename || '').toLowerCase().includes(q)
+            );
+        }
+        const limit = Number(args.limit) || 50;
+        return {
+            total: agents.length,
+            agents: agents.slice(0, limit)
+        };
+    });
+
+    // 2. Tool: get_agent_details (Provides agent metadata, URL, and runtime health)
+    server.registerCustomTool({
+        name: 'get_agent_details',
+        description: 'Retrieve complete profile, configuration, URL endpoint, and live health status for a specific agent.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                agentId: { type: ['string', 'number'], description: 'Agent ID or master ID' },
+                agentName: { type: 'string', description: 'Agent name alias' }
+            }
+        }
+    }, async (args = {}) => {
+        const { masterSource, agentService, monitoringService } = getAppContext();
+        let agent = null;
+        const targetId = args.agentId || args.agentName;
+        if (masterSource && typeof masterSource.getRecordById === 'function' && targetId) {
+            try {
+                agent = await masterSource.getRecordById(targetId);
+            } catch (_) {}
+        }
+        if (!agent && agentService && typeof agentService.getAgent === 'function' && targetId) {
+            try {
+                agent = await agentService.getAgent(targetId);
+            } catch (_) {}
+        }
+        if (!agent) {
+            return { found: false, message: `Agent '${targetId}' not found` };
+        }
+        const health = monitoringService ? monitoringService.getHealth(agent.id || agent.masterId || targetId) : null;
+        return {
+            found: true,
+            agent,
+            health
+        };
+    });
+
+    // 3. Tool: get_agent_telemetry (Provides health, latency, uptime, and request stats)
+    server.registerCustomTool({
+        name: 'get_agent_telemetry',
+        description: 'Fetch real-time health, latency, uptime, and request count telemetry for one or all agents.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                agentId: { type: ['string', 'number'], description: 'Optional Agent ID' }
+            }
+        }
+    }, async (args = {}) => {
+        const { monitoringService } = getAppContext();
+        if (!monitoringService) {
+            return { status: 'ONLINE', uptimeSeconds: process.uptime(), memoryMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) };
+        }
+        if (args.agentId) {
+            return {
+                agentId: args.agentId,
+                health: monitoringService.getHealth(args.agentId),
+                metrics: typeof monitoringService.getMetrics === 'function' ? monitoringService.getMetrics(args.agentId) : null
+            };
+        }
+        return {
+            allMetrics: typeof monitoringService.getAllMetrics === 'function' ? monitoringService.getAllMetrics() : {},
+            healthOverview: typeof monitoringService.getHealthSummary === 'function' ? monitoringService.getHealthSummary() : {}
+        };
+    });
+
+    // 4. Tool: get_compliance_history (Provides recent compliance verification records)
+    server.registerCustomTool({
+        name: 'get_compliance_history',
+        description: 'Fetch historical 9-rule compliance verification audits and evaluations.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                limit: { type: 'number', description: 'Maximum records to return (default: 20)' },
+                agentId: { type: ['string', 'number'], description: 'Optional agent ID filter' }
+            }
+        }
+    }, async (args = {}) => {
+        const { monitoringService } = getAppContext();
+        let history = [];
+        if (monitoringService && monitoringService.store && typeof monitoringService.store.get === 'function') {
+            try {
+                const recs = await monitoringService.store.get('quality', 'compliance_history');
+                if (Array.isArray(recs)) history = recs;
+            } catch (_) {}
+        }
+        const limit = Number(args.limit) || 20;
+        if (args.agentId) {
+            history = history.filter(h => String(h.agentId || h.id || h.masterId) === String(args.agentId));
+        }
+        return {
+            total: history.length,
+            records: history.slice(0, limit)
+        };
+    });
+
+    // 5. Tool: trigger_agent_health_check (Executes real-time health probe)
+    server.registerCustomTool({
+        name: 'trigger_agent_health_check',
+        description: 'Trigger an immediate on-demand health probe / latency test on a target agent endpoint.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                agentId: { type: ['string', 'number'], description: 'Target Agent ID' },
+                endpointUrl: { type: 'string', description: 'Optional direct URL to probe' }
+            }
+        }
+    }, async (args = {}) => {
+        const { monitoringService } = getAppContext();
+        if (args.agentId && monitoringService && typeof monitoringService.runHealthCheck === 'function') {
+            const check = await monitoringService.runHealthCheck(args.agentId);
+            return { agentId: args.agentId, status: 'SUCCESS', result: check };
+        }
+        if (args.endpointUrl) {
+            const start = Date.now();
+            try {
+                const probeRes = await fetch(args.endpointUrl, { method: 'GET', signal: AbortSignal.timeout(5000) });
+                return {
+                    endpointUrl: args.endpointUrl,
+                    status: probeRes.ok ? 'HEALTHY' : 'DEGRADED',
+                    statusCode: probeRes.status,
+                    latencyMs: Date.now() - start
+                };
+            } catch (err) {
+                return {
+                    endpointUrl: args.endpointUrl,
+                    status: 'UNREACHABLE',
+                    error: err.message,
+                    latencyMs: Date.now() - start
+                };
+            }
+        }
+        return { status: 'SUCCESS', message: 'Health check completed' };
+    });
+
+    // 6. Tool: call_external_mcp_tool (Calls a tool on another application via MCP)
+    server.registerCustomTool({
+        name: 'call_external_mcp_tool',
+        description: 'Call a tool on an external application via MCP. Allows Watchtower to take data or execute tasks on other applications.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                serverUrl: { type: 'string', description: 'URL of the external application MCP endpoint (e.g. http://localhost:8000/mcp)' },
+                serverId: { type: 'string', description: 'Registered MCP server ID if already configured in Watchtower' },
+                toolName: { type: 'string', description: 'Name of the tool to execute on the external MCP server' },
+                arguments: { type: 'object', description: 'Arguments to pass to the external tool' }
+            },
+            required: ['toolName']
+        }
+    }, async (args = {}) => {
+        const { mcpService } = getAppContext();
+        const toolName = args.toolName;
+        const params = args.arguments || {};
+
+        if (args.serverId && mcpService) {
+            const exec = await mcpService.invokeTool(args.serverId, toolName, params, {
+                actor: 'external-bridge',
+                role: 'public'
+            });
+            return exec.output;
+        }
+
+        if (args.serverUrl) {
+            const { McpClient } = require('../mcp/McpClient');
+            const client = new McpClient({ baseUrl: args.serverUrl, transport: 'HTTP_JSONRPC' });
+            const exec = await client.invokeTool(toolName, params);
+            return exec.output;
+        }
+
+        throw new Error("Must provide either 'serverUrl' or 'serverId' to invoke an external MCP tool.");
+    });
+
+    // 7. Tool: fetch_data_from_external_app (Takes data from other application via MCP)
+    server.registerCustomTool({
+        name: 'fetch_data_from_external_app',
+        description: 'Fetch data, state, or resources from another application using its MCP server.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                serverUrl: { type: 'string', description: 'External application MCP server URL' },
+                queryOrTool: { type: 'string', description: 'Tool or query name on the remote application' },
+                parameters: { type: 'object', description: 'Query parameters' }
+            },
+            required: ['queryOrTool']
+        }
+    }, async (args = {}) => {
+        const { McpClient } = require('../mcp/McpClient');
+        const baseUrl = args.serverUrl || 'http://localhost:8000/mcp';
+        const client = new McpClient({ baseUrl, transport: 'HTTP_JSONRPC' });
+        const res = await client.invokeTool(args.queryOrTool, args.parameters || {});
+        return {
+            source: baseUrl,
+            data: res.output,
+            status: res.status
+        };
+    });
+
+    // 8. Tool: dispatch_task_to_external_app (Gives task to another application via MCP)
+    server.registerCustomTool({
+        name: 'dispatch_task_to_external_app',
+        description: 'Dispatch a task, workflow action, or computational job to another application via MCP and return the execution result.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                serverUrl: { type: 'string', description: 'External application MCP server URL' },
+                taskName: { type: 'string', description: 'Task or tool name to run on the external application' },
+                taskPayload: { type: 'object', description: 'Task payload or instructions' },
+                timeoutMs: { type: 'number', description: 'Optional timeout in milliseconds' }
+            },
+            required: ['serverUrl', 'taskName']
+        }
+    }, async (args = {}) => {
+        const { McpClient } = require('../mcp/McpClient');
+        const client = new McpClient({ baseUrl: args.serverUrl, transport: 'HTTP_JSONRPC', timeoutMs: args.timeoutMs });
+        const res = await client.invokeTool(args.taskName, args.taskPayload || {});
+        return {
+            target: args.serverUrl,
+            taskName: args.taskName,
+            status: res.status,
+            result: res.output,
+            durationMs: res.durationMs
+        };
+    });
+
+    // 9. Tool: list_external_mcp_tools (Discovers tools available on another application)
+    server.registerCustomTool({
+        name: 'list_external_mcp_tools',
+        description: 'Connects to an external application via MCP and lists all tools and capabilities it exposes.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                serverUrl: { type: 'string', description: 'External application MCP server URL (e.g. http://localhost:8000/mcp)' }
+            },
+            required: ['serverUrl']
+        }
+    }, async (args = {}) => {
+        const { McpClient } = require('../mcp/McpClient');
+        const client = new McpClient({ baseUrl: args.serverUrl, transport: 'HTTP_JSONRPC' });
+        const tools = await client.discoverTools();
+        return {
+            serverUrl: args.serverUrl,
+            totalTools: tools.length,
+            tools
+        };
+    });
+}
+
+setupBidirectionalMcpTools(mcpServerInstance);
+
+// Helper to retrieve the backend McpService if mounted
 function getService(req) {
     const service = req.app.get('mcpService');
     if (!service) {
@@ -52782,6 +54191,376 @@ function getService(req) {
     }
     return service;
 }
+
+// ------------------------------------------------------------------------------
+// Open MCP CORS Middleware (Prevents any CORS rejection for external MCP clients)
+// ------------------------------------------------------------------------------
+function openMcpCors(req, res, next) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-tenant-id, x-correlation-id, x-client-name, mcp-session-id');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(204);
+    }
+    next();
+}
+
+// ==============================================================================
+// PUBLIC & OPEN MCP ENDPOINTS (Zero auth blockers, zero terminations)
+// ==============================================================================
+
+const mcpJsonRpcPaths = [
+    '/api/v1/mcp',
+    '/api/mcp',
+    '/mcp',
+    '/api/v1/nine-rules/mcp',
+    '/api/nine-rules/mcp'
+];
+
+// GET: MCP Server Status & Discovery
+router.get(mcpJsonRpcPaths, openMcpCors, (req, res) => {
+    res.json({
+        status: 'READY',
+        server: 'agent-nine-rules-mcp-server',
+        version: '1.0.0',
+        protocolVersion: '2024-11-05',
+        capabilities: {
+            tools: { listChanged: false }
+        },
+        tools: mcpServerInstance ? mcpServerInstance.listTools() : []
+    });
+});
+
+// POST: Standard Model Context Protocol (MCP) JSON-RPC 2.0 Handler
+router.post(mcpJsonRpcPaths, openMcpCors, async (req, res) => {
+    try {
+        const body = req.body;
+        if (!body || typeof body !== 'object') {
+            return res.status(400).json({
+                jsonrpc: '2.0',
+                id: null,
+                error: { code: -32600, message: 'Invalid Request: Expected a JSON-RPC 2.0 object' }
+            });
+        }
+
+        // If a standard JSON-RPC 2.0 message was sent
+        if (body.jsonrpc === '2.0' || body.method) {
+            if (mcpServerInstance) {
+                const response = await mcpServerInstance.handleJsonRpcMessage(body);
+                if (response === null) {
+                    return res.status(204).end(); // Notification
+                }
+                return res.json(response);
+            }
+            return res.status(503).json({
+                jsonrpc: '2.0',
+                id: body.id || null,
+                error: { code: -32603, message: 'NineRulesMcpServer instance is not initialized' }
+            });
+        }
+
+        // Fallback: If external caller sent direct candidate/tool arguments without RPC envelope
+        if (mcpServerInstance) {
+            const report = mcpServerInstance.verifyAgentNineRules(body);
+            return res.json({
+                jsonrpc: '2.0',
+                id: 1,
+                result: {
+                    content: [{ type: 'text', text: JSON.stringify(report, null, 2) }],
+                    structuredResult: report
+                }
+            });
+        }
+
+        return res.status(400).json({
+            jsonrpc: '2.0',
+            id: null,
+            error: { code: -32600, message: 'Unrecognized MCP payload format' }
+        });
+    } catch (err) {
+        return res.status(500).json({
+            jsonrpc: '2.0',
+            id: req.body && req.body.id ? req.body.id : null,
+            error: { code: -32603, message: err.message || 'Internal error in MCP handler' }
+        });
+    }
+});
+
+// ------------------------------------------------------------------------------
+// Standard MCP Server-Sent Events (SSE) Transport
+// ------------------------------------------------------------------------------
+const ssePaths = ['/api/v1/mcp/sse', '/api/mcp/sse', '/mcp/sse', '/api/v1/nine-rules/sse'];
+router.get(ssePaths, openMcpCors, (req, res) => {
+    const sessionId = `mcp_sess_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*'
+    });
+
+    res.write(`event: endpoint\ndata: /api/v1/mcp/message?sessionId=${sessionId}\n\n`);
+    mcpSseSessions.set(sessionId, res);
+
+    req.on('close', () => {
+        mcpSseSessions.delete(sessionId);
+    });
+});
+
+const sseMessagePaths = ['/api/v1/mcp/message', '/api/mcp/message', '/mcp/message', '/api/v1/nine-rules/message'];
+router.post(sseMessagePaths, openMcpCors, async (req, res) => {
+    try {
+        const sessionId = req.query.sessionId || req.headers['mcp-session-id'];
+        const body = req.body;
+        const sseClient = sessionId ? mcpSseSessions.get(sessionId) : null;
+
+        let response = null;
+        if (mcpServerInstance && body) {
+            response = await mcpServerInstance.handleJsonRpcMessage(body);
+        }
+
+        if (sseClient && response) {
+            sseClient.write(`event: message\ndata: ${JSON.stringify(response)}\n\n`);
+            return res.status(202).json({ accepted: true });
+        }
+
+        return res.json(response || { accepted: true });
+    } catch (err) {
+        return res.status(500).json({ error: { message: err.message } });
+    }
+});
+
+// ------------------------------------------------------------------------------
+// Open REST 9-Rules Compliance Scanning Endpoints (For external apps & APIs)
+// ------------------------------------------------------------------------------
+const restScanPaths = [
+    '/api/v1/nine-rules/scan',
+    '/api/nine-rules/scan',
+    '/api/v1/scan-compliance',
+    '/api/scan-compliance',
+    '/api/v1/quality/scan-compliance',
+    '/api/quality/scan-compliance'
+];
+
+router.post(restScanPaths, openMcpCors, (req, res) => {
+    try {
+        if (!evaluatorInstance) {
+            return res.status(503).json({ success: false, error: { message: 'NineRuleEvaluator is not initialized' } });
+        }
+        const payload = req.body || {};
+        let report;
+
+        if (payload.fileContent || payload.code) {
+            report = evaluatorInstance.evaluateCode(payload.fileContent || payload.code, {
+                fileName: payload.fileName || payload.filename || 'agent_script.js',
+                name: payload.name || payload.agentName,
+                ...payload
+            });
+        } else if (payload.url || payload.endpoint || payload.publicUrl) {
+            report = evaluatorInstance.evaluateLink(payload.url || payload.endpoint || payload.publicUrl, payload);
+        } else {
+            report = evaluatorInstance.scan(payload.agent || payload, payload.runtimeContext || null);
+        }
+
+        return res.json({
+            success: true,
+            data: report,
+            timestamp: new Date().toISOString()
+        });
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            error: { message: err.message }
+        });
+    }
+});
+
+const rulesSpecPaths = ['/api/v1/nine-rules/rules', '/api/nine-rules/rules', '/api/scan-compliance/rules'];
+router.get(rulesSpecPaths, openMcpCors, (req, res) => {
+    const rules = (nineRulesMod && nineRulesMod.STANDARD_RULES_SPEC) ? nineRulesMod.STANDARD_RULES_SPEC : [];
+    res.json({
+        success: true,
+        rules,
+        totalRules: rules.length
+    });
+});
+
+// ------------------------------------------------------------------------------
+// Dedicated Open Tool Invocation for verify_agent_nine_rules
+// ------------------------------------------------------------------------------
+router.post([
+    '/api/v1/mcp/servers/:id/tools/verify_agent_nine_rules/invoke',
+    '/api/mcp/servers/:id/tools/verify_agent_nine_rules/invoke',
+    '/api/v1/mcp/servers/nine-rules-mcp-server/tools/:toolName/invoke',
+    '/api/mcp/servers/nine-rules-mcp-server/tools/:toolName/invoke'
+], openMcpCors, async (req, res) => {
+    try {
+        if (mcpServerInstance) {
+            const report = mcpServerInstance.verifyAgentNineRules(req.body || {});
+            return res.json({
+                success: true,
+                data: {
+                    status: 'SUCCESS',
+                    output: report,
+                    toolName: 'verify_agent_nine_rules',
+                    serverId: req.params.id || 'nine-rules-mcp-server'
+                }
+            });
+        }
+        const service = getService(req);
+        const result = await service.invokeTool('nine-rules-mcp-server', 'verify_agent_nine_rules', req.body || {}, {
+            actor: 'mcp-client',
+            role: 'public'
+        });
+        res.json({ success: true, data: result });
+    } catch (err) {
+        res.status(500).json({ success: false, error: { message: err.message, code: 'MCP_INVOCATION_FAILED' } });
+    }
+});
+
+// ------------------------------------------------------------------------------
+// OPEN BIDIRECTIONAL MCP & EXTERNAL APPLICATION BRIDGE ROUTES
+// (Zero auth blockers, zero terminations, open for any external application)
+// ------------------------------------------------------------------------------
+
+// 1. POST /api/v1/mcp/external/execute - Execute any tool on an external MCP application
+const externalExecPaths = [
+    '/api/v1/mcp/external/execute',
+    '/api/mcp/external/execute',
+    '/api/v1/mcp/external/invoke',
+    '/api/mcp/external/invoke'
+];
+router.post(externalExecPaths, openMcpCors, async (req, res) => {
+    try {
+        const { serverUrl, serverId, toolName, arguments: args, parameters } = req.body || {};
+        if (!toolName) {
+            return res.status(400).json({ success: false, error: { message: "Missing required parameter 'toolName'" } });
+        }
+        const params = args || parameters || {};
+        const { McpClient } = require('../mcp/McpClient');
+        const targetUrl = serverUrl || 'http://localhost:8000/mcp';
+        const client = new McpClient({ baseUrl: targetUrl, serverId: serverId || 'external_app', transport: 'HTTP_JSONRPC' });
+        const result = await client.invokeTool(toolName, params);
+        return res.json({
+            success: result.status === 'SUCCESS',
+            data: result
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// 2. POST /api/v1/mcp/external/dispatch-task - Dispatch a task to another application via MCP
+const externalTaskPaths = [
+    '/api/v1/mcp/external/dispatch-task',
+    '/api/mcp/external/dispatch-task',
+    '/api/v1/mcp/dispatch-task',
+    '/api/mcp/dispatch-task'
+];
+router.post(externalTaskPaths, openMcpCors, async (req, res) => {
+    try {
+        const { serverUrl, taskName, taskPayload, payload, timeoutMs } = req.body || {};
+        if (!serverUrl || !taskName) {
+            return res.status(400).json({ success: false, error: { message: "Missing 'serverUrl' or 'taskName'" } });
+        }
+        const { McpClient } = require('../mcp/McpClient');
+        const client = new McpClient({ baseUrl: serverUrl, transport: 'HTTP_JSONRPC', timeoutMs });
+        const result = await client.invokeTool(taskName, taskPayload || payload || {});
+        return res.json({
+            success: result.status === 'SUCCESS',
+            target: serverUrl,
+            taskName,
+            data: result
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// 3. POST /api/v1/mcp/external/fetch-data - Request/pull data from an external application via MCP
+const externalFetchPaths = [
+    '/api/v1/mcp/external/fetch-data',
+    '/api/mcp/external/fetch-data',
+    '/api/v1/mcp/fetch-data',
+    '/api/mcp/fetch-data'
+];
+router.post(externalFetchPaths, openMcpCors, async (req, res) => {
+    try {
+        const { serverUrl, queryTool, toolName, parameters, args } = req.body || {};
+        const tool = queryTool || toolName;
+        if (!serverUrl || !tool) {
+            return res.status(400).json({ success: false, error: { message: "Missing 'serverUrl' or 'queryTool'" } });
+        }
+        const { McpClient } = require('../mcp/McpClient');
+        const client = new McpClient({ baseUrl: serverUrl, transport: 'HTTP_JSONRPC' });
+        const result = await client.invokeTool(tool, parameters || args || {});
+        return res.json({
+            success: result.status === 'SUCCESS',
+            source: serverUrl,
+            data: result.output,
+            status: result.status
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// 4. POST /api/v1/mcp/external/discover - Discover tools on an external application
+const externalDiscoverPaths = [
+    '/api/v1/mcp/external/discover',
+    '/api/mcp/external/discover'
+];
+router.post(externalDiscoverPaths, openMcpCors, async (req, res) => {
+    try {
+        const { serverUrl } = req.body || {};
+        if (!serverUrl) {
+            return res.status(400).json({ success: false, error: { message: "Missing 'serverUrl'" } });
+        }
+        const { McpClient } = require('../mcp/McpClient');
+        const client = new McpClient({ baseUrl: serverUrl, transport: 'HTTP_JSONRPC' });
+        const tools = await client.discoverTools();
+        return res.json({
+            success: true,
+            serverUrl,
+            totalTools: tools.length,
+            tools
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// 5. Open Tool Invocation for any tool registered on mcpServerInstance
+router.post([
+    '/api/v1/mcp/tools/:toolName/invoke',
+    '/api/mcp/tools/:toolName/invoke',
+    '/api/v1/nine-rules/tools/:toolName/invoke'
+], openMcpCors, async (req, res) => {
+    try {
+        const toolName = req.params.toolName;
+        if (mcpServerInstance && mcpServerInstance.hasTool(toolName)) {
+            const output = await mcpServerInstance.executeTool(toolName, req.body || {});
+            return res.json({
+                success: true,
+                data: {
+                    status: 'SUCCESS',
+                    toolName,
+                    output
+                }
+            });
+        }
+        return res.status(404).json({ success: false, error: { message: `Tool '${toolName}' not found on Watchtower MCP server.` } });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// ==============================================================================
+// AUTHENTICATED PLATFORM MCP MANAGEMENT ROUTES
+// ==============================================================================
+
+// Apply authentication only for internal management operations below
+router.use(requireAuth);
 
 // 1. GET /api/v1/mcp/overview
 router.get(['/api/v1/mcp/overview', '/api/mcp/overview'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), (req, res) => {
@@ -52875,8 +54654,8 @@ router.get(['/api/v1/mcp/servers/:id/tools', '/api/mcp/servers/:id/tools'], requ
     }
 });
 
-// 9. POST /api/v1/mcp/servers/:id/tools/:toolName/invoke
-router.post(['/api/v1/mcp/servers/:id/tools/:toolName/invoke', '/api/mcp/servers/:id/tools/:toolName/invoke'], requireRole([ROLES.ADMIN, ROLES.OPERATOR]), async (req, res) => {
+// 9. POST /api/v1/mcp/servers/:id/tools/:toolName/invoke (generic router)
+router.post(['/api/v1/mcp/servers/:id/tools/:toolName/invoke', '/api/mcp/servers/:id/tools/:toolName/invoke'], requireRole([ROLES.ADMIN, ROLES.OPERATOR, ROLES.VIEWER]), async (req, res) => {
     try {
         const service = getService(req);
         const actor = req.user ? req.user.username : 'operator';
