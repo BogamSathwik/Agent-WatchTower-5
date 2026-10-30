@@ -61,7 +61,18 @@ try {
 const { createApp, defaultShutdownCoordinator } = require('./src/app');
 const { defaultPersistenceManager } = require('./src/persistence/PersistenceManager');
 
-const PORT = process.env.PORT || 3000;
+const isLinux = process.platform === 'linux';
+const isOffice = isLinux || process.env.OFFICE_SERVER === 'true';
+
+let rawPort = parseInt(process.env.PORT, 10);
+let PORT = rawPort;
+if (isNaN(PORT)) {
+    PORT = isOffice ? 8024 : 3000;
+} else if (isOffice && (PORT < 8000 || PORT > 9000)) {
+    console.warn(`[port-guard] Backend port ${PORT} outside permitted 8000-9000 range on office server. Defaulting to 8024.`);
+    PORT = 8024;
+}
+
 const HOST = process.env.HOST || '0.0.0.0';
 
 // Initialize persistence first (verifies MySQL connectivity when configured),

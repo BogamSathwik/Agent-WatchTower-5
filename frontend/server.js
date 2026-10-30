@@ -6,9 +6,28 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const BACKEND_PORT = parseInt(process.env.BACKEND_PORT, 10) || 3000;
+const isLinux = process.platform === 'linux';
+const isOffice = isLinux || process.env.OFFICE_SERVER === 'true';
+
+let rawFrontendPort = parseInt(process.env.PORT || process.env.FRONTEND_PORT, 10);
+let PORT = rawFrontendPort;
+if (isNaN(PORT)) {
+    PORT = isOffice ? 8023 : 5000;
+} else if (isOffice && (PORT < 8000 || PORT > 9000)) {
+    console.warn(`[port-guard] Frontend port ${PORT} outside 8000-9000 range on office server. Defaulting to 8023.`);
+    PORT = 8023;
+}
+
+let rawBackendPort = parseInt(process.env.BACKEND_PORT, 10);
+let BACKEND_PORT = rawBackendPort;
+if (isNaN(BACKEND_PORT)) {
+    BACKEND_PORT = isOffice ? 8024 : 3000;
+} else if (isOffice && (BACKEND_PORT < 8000 || BACKEND_PORT > 9000)) {
+    console.warn(`[port-guard] Backend proxy target port ${BACKEND_PORT} outside 8000-9000 range on office server. Defaulting to 8024.`);
+    BACKEND_PORT = 8024;
+}
+
 const BACKEND_HOST = process.env.BACKEND_HOST || 'localhost';
-const PORT = parseInt(process.env.PORT, 10) || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 const indexPath = path.join(__dirname, 'index.html');
 

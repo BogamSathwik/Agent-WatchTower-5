@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node backend/server.js",
     "start:all": "node start_servers.js",
+    "start:office": "node start_servers.js --office",
+    "start:ubuntu": "node start_servers.js --ubuntu",
     "start:backend": "npm --prefix backend start",
     "start:frontend": "npm --prefix frontend start",
     "test": "echo \"Agent Watchtower: Production services healthy\""
