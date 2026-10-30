@@ -20,10 +20,25 @@ process.on('unhandledRejection', (reason) => {
     console.error('[frontend-proxy] Unhandled rejection:', reason);
 });
 
-// Function to get current index HTML
-function getIndexHtml() {
+// Function to get current index HTML with optional runtime config injection
+function getIndexHtml(req) {
     try {
-        return fs.readFileSync(indexPath);
+        let html = fs.readFileSync(indexPath, 'utf8');
+        const clientHost = (req && req.headers && req.headers.host) ? req.headers.host.split(':')[0] : 'localhost';
+        const backendUrl = process.env.BACKEND_PUBLIC_URL || `http://${clientHost}:${BACKEND_PORT}`;
+        const configScript = `
+    <script>
+        window.__WATCHTOWER_CONFIG__ = {
+            backendUrl: ${JSON.stringify(backendUrl)},
+            backendPort: ${BACKEND_PORT},
+            frontendPort: ${PORT},
+            injectedAt: ${Date.now()}
+        };
+    </script>`;
+        if (html.includes('</head>')) {
+            html = html.replace('</head>', `${configScript}\n</head>`);
+        }
+        return Buffer.from(html);
     } catch (e) {
         console.error('[frontend-proxy] Could not read index.html:', e.message);
         return Buffer.from('<h1>Error loading index.html</h1>');
@@ -39,8 +54,8 @@ const server = http.createServer((req, res) => {
         console.warn('[frontend-proxy] Outgoing response error:', err.message);
     });
 
-    // Transparently proxy all API and MCP routes to the backend
-    if (req.url.startsWith('/api/') || req.url.startsWith('/mcp') || req.url.startsWith('/mock-app/')) {
+    // Transparently proxy all API, MCP, and Health routes to the backend
+    if (req.url.startsWith('/api/') || req.url.startsWith('/mcp') || req.url.startsWith('/mock-app/') || req.url === '/health' || req.url === '/api/health') {
         const proxyReq = http.request({
             hostname: BACKEND_HOST,
             port: BACKEND_PORT,
@@ -100,7 +115,7 @@ const server = http.createServer((req, res) => {
 
     // Serve fresh index.html for all other requests
     if (!res.headersSent) {
-        const html = getIndexHtml();
+        const html = getIndexHtml(req);
         res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
             'Content-Length': html.length,

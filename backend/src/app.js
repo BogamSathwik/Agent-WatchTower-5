@@ -819,15 +819,29 @@ function createApp(options = {}) {
         next();
     });
 
-    // CORS middleware: allow requests from standalone frontend (e.g. port 5000, etc.)
+    // CORS middleware: allow requests from standalone frontend, office remote server, etc.
     app.use((req, res, next) => {
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        const origin = req.headers.origin || '*';
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        if (req.headers.origin) {
+            res.setHeader('Access-Control-Allow-Credentials', 'true');
+        }
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-role, x-user-role, x-tenant-id');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-role, x-user-role, x-tenant-id, x-correlation-id, x-client-name, mcp-session-id, Accept, Origin, X-Requested-With');
         if (req.method === 'OPTIONS') {
             return res.sendStatus(204);
         }
         next();
+    });
+
+    // Public Health Check Endpoint for office server & external monitors (e.g. GET /api/health and /health)
+    app.get(['/api/health', '/health', '/api/v1/health'], (req, res) => {
+        return res.status(200).json({
+            status: 'healthy',
+            service: 'agent-watchtower',
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString()
+        });
     });
 
     // Multi-tenant middleware

@@ -62,6 +62,7 @@ const { createApp, defaultShutdownCoordinator } = require('./src/app');
 const { defaultPersistenceManager } = require('./src/persistence/PersistenceManager');
 
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 // Initialize persistence first (verifies MySQL connectivity when configured),
 // then build the app so state restoration runs against a ready store.
@@ -72,11 +73,12 @@ defaultPersistenceManager.initialize().catch(() => {}).finally(() => {
     module.exports = app;
 
     if (require.main === module) {
-        const server = app.listen(PORT, () => {
+        const server = app.listen(PORT, HOST, () => {
             console.log(`=======================================================`);
             console.log(`  Universal Monitoring & Intelligence Platform Core`);
-            console.log(`  Server listening on http://localhost:${PORT}`);
-            console.log(`  API Endpoint: http://localhost:${PORT}/api/v1/systems`);
+            console.log(`  Server listening on http://${HOST}:${PORT}`);
+            console.log(`  API Endpoint: http://${HOST}:${PORT}/api/v1/systems`);
+            console.log(`  Health Check: http://${HOST}:${PORT}/api/health`);
             console.log(`=======================================================`);
         });
         defaultShutdownCoordinator.attachSignalHandlers(server);
@@ -906,15 +908,29 @@ function createApp(options = {}) {
         next();
     });
 
-    // CORS middleware: allow requests from standalone frontend (e.g. port 5000, etc.)
+    // CORS middleware: allow requests from standalone frontend, office remote server, etc.
     app.use((req, res, next) => {
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        const origin = req.headers.origin || '*';
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        if (req.headers.origin) {
+            res.setHeader('Access-Control-Allow-Credentials', 'true');
+        }
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-role, x-user-role, x-tenant-id');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-role, x-user-role, x-tenant-id, x-correlation-id, x-client-name, mcp-session-id, Accept, Origin, X-Requested-With');
         if (req.method === 'OPTIONS') {
             return res.sendStatus(204);
         }
         next();
+    });
+
+    // Public Health Check Endpoint for office server & external monitors (e.g. GET /api/health and /health)
+    app.get(['/api/health', '/health', '/api/v1/health'], (req, res) => {
+        return res.status(200).json({
+            status: 'healthy',
+            service: 'agent-watchtower',
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString()
+        });
     });
 
     // Multi-tenant middleware

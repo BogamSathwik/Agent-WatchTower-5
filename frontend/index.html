@@ -1630,9 +1630,9 @@
                     <button class="btn btn-secondary" onclick="refreshActiveTab()">
                         🔄 Refresh Data
                     </button>
-                    <div class="header-status-pill">
-                        <span class="status-pulse"></span>
-                        <span>Operational</span>
+                    <div class="header-status-pill" id="headerServerConnectionPill" onclick="openServerConnectionModal()" style="cursor: pointer; display: flex; align-items: center; gap: 0.4rem;" title="Click to view or change Office Server / Remote Backend Request URL">
+                        <span class="status-pulse" id="headerServerPulse" style="background: #10b981;"></span>
+                        <span id="headerServerStatusText">API: Auto</span>
                     </div>
                 </div>
             </header>
@@ -4501,6 +4501,59 @@ await fetch('http://localhost:5000/api/v1/mcp/share-data', {
         </div>
     </div>
 
+    <!-- Server Connection & Office Remote Network Modal -->
+    <div id="serverConnectionModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card" style="max-width: 580px; border-top: 4px solid var(--primary);">
+            <div class="modal-header" style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.85rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                        <span>🌐</span> Server & Network Connection
+                    </h3>
+                    <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;">
+                        Connect Watchtower Frontend to your Office Server / RustDesk remote backend.
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeServerConnectionModal()">✕</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div id="serverConnBanner" style="padding: 0.75rem; border-radius: var(--radius-sm); font-size: 0.82rem; border: 1px solid var(--border-subtle); background: var(--bg-base); display: flex; align-items: center; justify-content: space-between;">
+                    <span id="serverConnBannerText">Probing server status…</span>
+                    <button class="btn btn-secondary btn-sm" onclick="probeCurrentBackendHealth(true)">⚡ Probe Health</button>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.3rem; text-transform: uppercase;">
+                        Backend Request URL (API Base)
+                    </label>
+                    <input type="text" id="txtCustomApiBase" placeholder="e.g. http://61.2.142.91:8024 or http://localhost:3000 (leave empty for same-origin proxy)" style="width: 100%; padding: 0.6rem 0.75rem; font-size: 0.88rem; font-family: monospace; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-main);">
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">
+                        All API, MCP, and telemetry requests across the platform will route to this base URL with full CORS and credentials.
+                    </div>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.4rem; text-transform: uppercase;">
+                        Quick Presets
+                    </label>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="setApiBasePreset('http://61.2.142.91:8024')">🏢 Office Remote (:8024)</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="setApiBasePreset('http://localhost:3000')">💻 Local Core (:3000)</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="setApiBasePreset('')">🔄 Same-Origin / Proxy (Default)</button>
+                    </div>
+                </div>
+
+                <div style="background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-sm); padding: 0.75rem; font-size: 0.78rem; color: var(--text-muted); line-height: 1.5;">
+                    💡 <strong>Tip for RustDesk / Remote Office:</strong> You can also load this interface directly with URL parameter <code>?api=http://61.2.142.91:8024</code> to automatically connect on launch.
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 0.5rem; border-top: 1px solid var(--border-subtle); padding-top: 0.85rem; margin-top: 0.5rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeServerConnectionModal()">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveAndApplyApiBase()" style="font-weight: 700;">💾 Save & Reconnect</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Managed MCP Endpoint Modal -->
     <div id="addMcpEndpointModal" class="modal-overlay" style="display: none;">
         <div class="modal-card" style="max-width: 600px; border-top: 4px solid var(--accent-cyan);">
@@ -5038,6 +5091,143 @@ await fetch('http://localhost:5000/api/v1/mcp/share-data', {
     </div>
 
     <script>
+        // =====================================================================
+        // UNIVERSAL WATCHTOWER API & OFFICE SERVER RESOLVER (GLOBAL FETCH INTERCEPTOR)
+        // Automatically redirects all API, MCP, and telemetry requests to the
+        // remote Office Server / Backend Request URL with full CORS support.
+        // =====================================================================
+        (function() {
+            const originalFetch = window.fetch;
+
+            window.getWatchtowerApiBase = function() {
+                // 1. URL search param: ?apiUrl=... or ?api=...
+                try {
+                    const params = new URLSearchParams(window.location.search);
+                    const paramApi = params.get('apiUrl') || params.get('api');
+                    if (paramApi) {
+                        const clean = paramApi.replace(/\/$/, '');
+                        localStorage.setItem('watchtower_api_base', clean);
+                        return clean;
+                    }
+                } catch (e) {}
+
+                // 2. Saved preference in localStorage
+                try {
+                    const saved = localStorage.getItem('watchtower_api_base');
+                    if (saved !== null && saved !== undefined && saved !== '') {
+                        return saved.replace(/\/$/, '');
+                    }
+                } catch (e) {}
+
+                // 3. Runtime config injected by frontend proxy server
+                if (window.__WATCHTOWER_CONFIG__ && window.__WATCHTOWER_CONFIG__.backendUrl) {
+                    return window.__WATCHTOWER_CONFIG__.backendUrl.replace(/\/$/, '');
+                }
+
+                // 4. Fallback: empty string for same-origin relative requests
+                return '';
+            };
+
+            window.resolveWatchtowerUrl = function(url) {
+                if (typeof url !== 'string') return url;
+                const base = window.getWatchtowerApiBase();
+                if (!base) return url;
+
+                // If absolute localhost URL, rewrite to custom base
+                if (url.startsWith('http://localhost:3000') || url.startsWith('http://localhost:5000')) {
+                    const path = url.replace(/^http:\/\/localhost:(3000|5000)/, '');
+                    return base + (path.startsWith('/') ? path : '/' + path);
+                }
+
+                // Rewrite relative API paths to the backend base URL
+                if (url.startsWith('/api/') || url.startsWith('/mcp') || url.startsWith('/mock-app/') || url === '/health' || url === '/api/health') {
+                    return base + (url.startsWith('/') ? url : '/' + url);
+                }
+
+                return url;
+            };
+
+            window.fetch = function(input, init) {
+                if (typeof input === 'string') {
+                    input = window.resolveWatchtowerUrl(input);
+                } else if (input && typeof input.url === 'string') {
+                    const resolved = window.resolveWatchtowerUrl(input.url);
+                    if (resolved !== input.url) {
+                        input = new Request(resolved, input);
+                    }
+                }
+                return originalFetch.call(this, input, init);
+            };
+        })();
+
+        // Server Connection Modal & Health Probe Controllers
+        function openServerConnectionModal() {
+            const modal = document.getElementById('serverConnectionModal');
+            const txt = document.getElementById('txtCustomApiBase');
+            if (txt) {
+                txt.value = localStorage.getItem('watchtower_api_base') || (window.__WATCHTOWER_CONFIG__ ? window.__WATCHTOWER_CONFIG__.backendUrl : '');
+            }
+            if (modal) modal.style.display = 'flex';
+            probeCurrentBackendHealth(false);
+        }
+
+        function closeServerConnectionModal() {
+            const modal = document.getElementById('serverConnectionModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function setApiBasePreset(presetUrl) {
+            const txt = document.getElementById('txtCustomApiBase');
+            if (txt) txt.value = presetUrl;
+        }
+
+        async function saveAndApplyApiBase() {
+            const txt = document.getElementById('txtCustomApiBase');
+            const val = (txt ? txt.value.trim() : '').replace(/\/$/, '');
+            if (val) {
+                localStorage.setItem('watchtower_api_base', val);
+            } else {
+                localStorage.removeItem('watchtower_api_base');
+            }
+            closeServerConnectionModal();
+            await probeCurrentBackendHealth(true);
+            // Refresh active view
+            if (typeof refreshActiveTab === 'function') {
+                try { refreshActiveTab(); } catch (e) {}
+            }
+        }
+
+        async function probeCurrentBackendHealth(manual = false) {
+            const banner = document.getElementById('serverConnBannerText');
+            const pillText = document.getElementById('headerServerStatusText');
+            const pillPulse = document.getElementById('headerServerPulse');
+            const displayInput = document.getElementById('serverEndpointDisplay');
+            const base = window.getWatchtowerApiBase();
+            const probeUrl = (base ? base : '') + '/api/health';
+
+            if (banner) banner.innerText = `Pinging ${probeUrl}…`;
+            const t0 = performance.now();
+            try {
+                const res = await fetch(probeUrl, { method: 'GET', cache: 'no-cache' });
+                const latency = Math.round(performance.now() - t0);
+                if (res.ok) {
+                    const label = base ? base.replace(/^https?:\/\//, '') : 'Same-Origin Proxy';
+                    if (pillText) pillText.innerText = `API: ${label} (${latency}ms)`;
+                    if (pillPulse) pillPulse.style.background = '#10b981';
+                    if (banner) banner.innerHTML = `🟢 <strong>Connected</strong> to <code>${probeUrl}</code> in <strong>${latency}ms</strong> (HTTP ${res.status})`;
+                    if (displayInput) displayInput.value = base ? `${base}/api/v1` : `${window.location.origin}/api/v1`;
+                } else {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+            } catch (err) {
+                if (pillText) pillText.innerText = 'API: Offline';
+                if (pillPulse) pillPulse.style.background = '#ef4444';
+                if (banner) banner.innerHTML = `🔴 <strong>Unreachable</strong>: <code>${probeUrl}</code> (${err.message})`;
+            }
+        }
+
+        // Auto-probe backend health on boot
+        setTimeout(() => { probeCurrentBackendHealth(false); }, 500);
         async function apiClient(url, options = {}) {
             const defaultHeaders = {
                 'Content-Type': 'application/json',
