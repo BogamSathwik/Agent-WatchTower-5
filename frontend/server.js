@@ -39,8 +39,8 @@ const server = http.createServer((req, res) => {
         console.warn('[frontend-proxy] Outgoing response error:', err.message);
     });
 
-    // Transparently proxy all API routes to the backend
-    if (req.url.startsWith('/api/')) {
+    // Transparently proxy all API and MCP routes to the backend
+    if (req.url.startsWith('/api/') || req.url.startsWith('/mcp') || req.url.startsWith('/mock-app/')) {
         const proxyReq = http.request({
             hostname: BACKEND_HOST,
             port: BACKEND_PORT,

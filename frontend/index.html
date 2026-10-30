@@ -1566,6 +1566,15 @@
                     </div>
 
                     <div class="nav-section">
+                        <div class="nav-section-title">CONNECTIVITY &amp; MCP</div>
+                        <button class="nav-item" id="tabBtnMcp" onclick="switchTab('mcp')" data-tooltip="Bidirectional MCP Hub">
+                            <span class="nav-icon">🔌</span>
+                            <span class="nav-label">Bidirectional MCP Hub</span>
+                            <span class="status-pill status-PASS" style="font-size: 0.65rem; padding: 0.1rem 0.45rem; margin-left: auto;">2-WAY</span>
+                        </button>
+                    </div>
+
+                    <div class="nav-section">
                         <div class="nav-section-title">SYSTEM & GOVERNANCE</div>
                         <button class="nav-item" id="tabBtnAudit" onclick="switchTab('audit')" data-tooltip="Audit Logs & History">
                             <span class="nav-icon">📜</span>
@@ -2431,6 +2440,7 @@
                         <button class="btn btn-sm btn-primary" id="btnModeNineLink" onclick="switchNineRuleMode('link')">🌐 Live Link / Web App</button>
                         <button class="btn btn-sm btn-secondary" id="btnModeNineFile" onclick="switchNineRuleMode('file')">📁 Upload Script / File</button>
                         <button class="btn btn-sm btn-secondary" id="btnModeNineAgent" onclick="switchNineRuleMode('agent')">🤖 Registered Agent (442)</button>
+                        <button class="btn btn-sm btn-secondary" id="btnModeNineMcp" onclick="switchNineRuleMode('mcp')">🔌 External App via MCP</button>
                     </div>
                 </div>
 
@@ -2652,6 +2662,72 @@
                                 <span>⚡</span> <span id="btnVerifyAgentText">Verify Selected Agent Contract</span>
                             </button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Sub-Interface 4: Verify External Web App or Agent via MCP -->
+                <div id="nineModeMcpContainer" style="display: none;">
+                    <div style="background: rgba(99,102,241,0.05); border: 1px solid rgba(99,102,241,0.2); border-radius: var(--radius-sm); padding: 0.85rem 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                        <div>
+                            <strong style="color: var(--primary); font-size: 0.92rem; display: flex; align-items: center; gap: 0.4rem;">
+                                <span>🔌</span> Scan External Web App or Agent via Model Context Protocol (MCP)
+                            </strong>
+                            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+                                Connects over standard MCP JSON-RPC to inspect exposed tools, cognitive reasoning capabilities, action endpoints, and evaluate all 9 autonomous agent rules.
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+                            <span class="status-pill status-PASS" style="font-size: 0.68rem;">JSON-RPC 2.0</span>
+                            <span class="status-pill" style="background: rgba(16,185,129,0.12); color: #047857; font-size: 0.68rem; font-weight: 700;">LIVE PROBING</span>
+                        </div>
+                    </div>
+
+                    <!-- Presets -->
+                    <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap;">
+                        <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Quick Presets:</span>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="setNineMcpPreset('/api/v1/mcp/mock-external-app', 'Acme Enterprise Web App (Mock Simulator)', 'Autonomous billing, invoice generation, and customer directory web app', 'gpt-4o')">🏢 Built-in Mock Web App</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="setNineMcpPreset('http://localhost:5000/mock-app', 'Sample Web App (Live Link)', 'Web application with autonomous analytics and API actions', 'claude-3-5-sonnet')">🌐 Sample Web App (:5000)</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="setNineMcpPreset('http://localhost:4001/mcp', 'External Agent Worker (:4001)', 'Autonomous data pipeline and remediation worker agent', 'gemini-1.5-pro')">🤖 Remote Agent Worker (:4001)</button>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                        <div>
+                            <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">External MCP Server URL or Live Endpoint *</label>
+                            <div style="display: flex; gap: 0.4rem;">
+                                <input type="text" id="nineMcpInputServerUrl" placeholder="http://remote-app:8000/mcp or http://localhost:5000/api/v1/mcp/mock-external-app" style="flex: 1; padding: 0.55rem 0.75rem; font-size: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-main); font-family: monospace;" value="http://localhost:5000/api/v1/mcp/mock-external-app">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="testNineMcpConnectionUI()">⚡ Probe</button>
+                            </div>
+                            <div id="nineMcpProbeStatusHint" style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.25rem;"></div>
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">External Web App / Agent Name</label>
+                            <input type="text" id="nineMcpInputAppName" placeholder="e.g. Acme Enterprise Web App" style="width: 100%; padding: 0.55rem 0.75rem; font-size: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-main);" value="Acme Enterprise Web App">
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                        <div>
+                            <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">AI / Cognitive Model (Rule 2)</label>
+                            <input type="text" id="nineMcpInputModel" placeholder="e.g. gpt-4o, claude-3-5-sonnet" style="width: 100%; padding: 0.55rem 0.75rem; font-size: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-main);" value="gpt-4o">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">Discovered Tools / Capabilities (Rule 4)</label>
+                            <input type="text" id="nineMcpInputTools" placeholder="Discovered automatically or comma-separated" style="width: 100%; padding: 0.55rem 0.75rem; font-size: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-main);">
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">Declared Purpose / Mission (Rule 1)</label>
+                        <textarea id="nineMcpInputPurpose" rows="2" placeholder="Operational purpose of the external web app / agent..." style="width: 100%; padding: 0.55rem 0.75rem; font-size: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-main); resize: vertical;">Autonomous enterprise operations web app exposing billing, inventory, and user directory tools via Model Context Protocol</textarea>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">
+                            Watchtower connects directly via MCP JSON-RPC, discovers capabilities, and generates empirical PASS/FAIL evidence for all 9 rules.
+                        </div>
+                        <button type="button" class="btn btn-primary" id="btnRunNineMcpScan" onclick="runNineRulesMcpScan()" style="font-weight: 700; padding: 0.65rem 1.5rem; display: flex; align-items: center; gap: 0.5rem; background: linear-gradient(135deg, #10b981, #059669); border: none; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);">
+                            <span>🚀</span> Scan External App via MCP &amp; Give 9-Rule Output
+                        </button>
                     </div>
                 </div>
             </div>
@@ -3706,6 +3782,638 @@
                                 <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No workflow executions logged yet.</td></tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- ============================================================================== -->
+                <!-- Panel: BIDIRECTIONAL MODEL CONTEXT PROTOCOL (MCP) INTEGRATION HUB -->
+                <!-- ============================================================================== -->
+                <div id="panelMcp" class="tab-panel">
+                    <!-- Top Header Banner -->
+                    <div class="panel-header-banner" style="margin-bottom: 1.25rem;">
+                        <div>
+                            <h2 style="display: flex; align-items: center; gap: 0.6rem; font-size: 1.3rem;">
+                                <span>🔌</span> MODEL CONTEXT PROTOCOL (MCP) INTEGRATION HUB
+                            </h2>
+                            <div class="panel-subtitle" style="max-width: 900px; margin-top: 0.3rem;">
+                                Bidirectional two-way interoperability: Share Watchtower fleet telemetry, health, and 9-rule audits with external applications &amp; AI models, and query, take data, and dispatch tasks to other web applications via standard MCP (JSON-RPC 2.0).
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                            <span class="status-pill status-PASS" style="font-weight: 700;">PROTOCOL 2024-11-05</span>
+                            <span class="status-pill" style="background: rgba(99,102,241,0.12); color: var(--primary); font-weight: 700;">BIDIRECTIONAL 2-WAY</span>
+                            <button class="btn btn-secondary btn-sm" onclick="fetchMcpOverviewUI()">🔄 Refresh Hub</button>
+                            <button class="btn btn-primary btn-sm" onclick="switchMcpSubTab('askData')">⚡ Ask &amp; Take Data</button>
+                        </div>
+                    </div>
+
+                    <!-- Top 4 Symmetrical Overview Cards -->
+                    <div class="overview-grid" style="margin-bottom: 1.5rem;">
+                        <div class="metric-card" onclick="switchMcpSubTab('shareData')" style="cursor: pointer;" title="Click to view inbound server tools and endpoints">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div class="metric-label">Inbound MCP Server</div>
+                                <span class="status-pill status-PASS" style="font-size: 0.65rem; padding: 2px 7px;">ONLINE</span>
+                            </div>
+                            <div class="metric-value" id="valMcpInboundToolsCount" style="color: var(--primary);">13 Tools</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">Serving :3000 &amp; :5000 · Open CORS</div>
+                        </div>
+
+                        <div class="metric-card" onclick="switchMcpSubTab('askData')" style="cursor: pointer;" title="Click to ask and take data from external web apps">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div class="metric-label" style="color: var(--accent-emerald);">Outbound MCP Client</div>
+                                <span class="status-pill status-PASS" style="font-size: 0.65rem; padding: 2px 7px;">READY</span>
+                            </div>
+                            <div class="metric-value" id="valMcpOutboundStatus" style="color: var(--accent-emerald);">Connected</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">Query &amp; Take External Web App Data</div>
+                        </div>
+
+                        <div class="metric-card" onclick="switchMcpSubTab('shareData')" style="cursor: pointer;" title="Click to view ingested external data">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div class="metric-label" style="color: var(--accent-cyan);">Shared Ingest Store</div>
+                                <span class="status-pill" style="background: rgba(2,132,199,0.12); color: var(--accent-cyan); font-size: 0.65rem; padding: 2px 7px;">PERSISTENT</span>
+                            </div>
+                            <div class="metric-value" id="valMcpSharedRecordsCount" style="color: var(--accent-cyan);">0 Records</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">Ingested from External Web Apps</div>
+                        </div>
+
+                        <div class="metric-card" onclick="switchMcpSubTab('activityLog')" style="cursor: pointer;" title="Click to view real-time data exchange logs">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div class="metric-label" style="color: var(--accent-purple);">Data Exchange Activity</div>
+                                <span class="status-pill" style="background: rgba(124,58,237,0.12); color: var(--accent-purple); font-size: 0.65rem; padding: 2px 7px;">REAL-TIME</span>
+                            </div>
+                            <div class="metric-value" id="valMcpTotalExchanges" style="color: var(--accent-purple);">0 Exchanges</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">Inbound &amp; Outbound Monitored</div>
+                        </div>
+                    </div>
+
+                    <!-- Inner Sub-Tabs Navigation -->
+                    <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid var(--border-subtle); margin-bottom: 1.5rem; flex-wrap: wrap;">
+                        <button class="btn btn-sm" id="btnMcpSubTabAsk" onclick="switchMcpSubTab('askData')" style="border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: var(--bg-card); color: var(--primary); font-weight: 700; border-bottom: 2px solid var(--primary); margin-bottom: -2px;">
+                            📥 Ask &amp; Take Data from Other Web Apps
+                        </button>
+                        <button class="btn btn-sm" id="btnMcpSubTabShare" onclick="switchMcpSubTab('shareData')" style="border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: transparent; color: var(--text-muted); font-weight: 600;">
+                            📤 Share Data to Other Web Apps (Server Gateway)
+                        </button>
+                        <button class="btn btn-sm" id="btnMcpSubTabLog" onclick="switchMcpSubTab('activityLog')" style="border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: transparent; color: var(--text-muted); font-weight: 600;">
+                            📊 Live Data Exchange Activity Console
+                        </button>
+                        <button class="btn btn-sm" id="btnMcpSubTabGuides" onclick="switchMcpSubTab('guides')" style="border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: transparent; color: var(--text-muted); font-weight: 600;">
+                            📖 Connect Guides &amp; Code Snippets
+                        </button>
+                        <button class="btn btn-sm" id="btnMcpSubTabScan" onclick="switchMcpSubTab('scanNineRules')" style="border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: transparent; color: var(--text-muted); font-weight: 600;">
+                            🛡️ 9-Rule Scanner (Web Apps &amp; Agents via MCP)
+                        </button>
+                    </div>
+
+                    <!-- ============================================================== -->
+                    <!-- SUB-TAB 1: ASK & TAKE DATA FROM OTHER WEB APPS (OUTBOUND) -->
+                    <!-- ============================================================== -->
+                    <div id="mcpSubTabAskData" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                        <!-- External Server Connection Card -->
+                        <div class="metric-card" style="border-left: 4px solid var(--accent-emerald);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                                <div>
+                                    <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
+                                        🌐 Connect to External Web App via MCP
+                                    </h3>
+                                    <div style="font-size: 0.78rem; color: var(--text-muted);">
+                                        Specify the MCP server endpoint of any external web application, microservice, or local agent.
+                                    </div>
+                                </div>
+                                <div id="mcpConnStatusBadge" class="status-pill status-PASS">READY TO QUERY</div>
+                            </div>
+
+                            <!-- Target Endpoint & Quick Presets -->
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                                    <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">Quick Presets:</span>
+                                    <button class="btn btn-secondary btn-sm" onclick="setExternalMcpUrl('/api/v1/mcp/mock-external-app')">🏢 Built-in Acme Enterprise App (Mock Simulator)</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="setExternalMcpUrl('http://localhost:4001/mcp')">🤖 Local Agent Service (:4001)</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="setExternalMcpUrl('http://localhost:8000/mcp')">🌐 External Microservice (:8000)</button>
+                                </div>
+
+                                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                                    <input type="text" id="txtMcpExternalUrl" class="btn btn-secondary" style="flex: 1; min-width: 280px; text-align: left; background: var(--bg-input); font-family: monospace; font-size: 0.85rem;" value="http://localhost:5000/api/v1/mcp/mock-external-app" placeholder="http://remote-app:8000/mcp">
+                                    <button class="btn btn-secondary" onclick="testExternalConnectionUI()">⚡ Test Connection</button>
+                                    <button class="btn btn-primary" onclick="discoverExternalToolsUI()">🔍 Discover Available Tools</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2-Column Working Layout: Query/Task Runner vs Result Viewer -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1.5rem;">
+                            <!-- Column 1: Ask & Take Data Form -->
+                            <div class="metric-card">
+                                <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
+                                    <span>📥</span> Ask &amp; Take Data from Web App
+                                </h3>
+                                <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem;">
+                                    Select an MCP tool discovered from the remote web application, specify your query parameters, and pull data back into Watchtower.
+                                </div>
+
+                                <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+                                    <div>
+                                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.3rem;">REMOTE MCP TOOL / QUERY</label>
+                                        <select id="selMcpExternalTool" class="btn btn-secondary" style="width: 100%; text-align: left; background: var(--bg-input); font-size: 0.85rem;" onchange="onExternalToolSelected()">
+                                            <option value="get_external_app_users">get_external_app_users (Query user directory &amp; roles)</option>
+                                            <option value="fetch_billing_invoices">fetch_billing_invoices (Retrieve customer invoices &amp; balances)</option>
+                                            <option value="query_inventory_levels">query_inventory_levels (Check warehouse hardware stock)</option>
+                                        </select>
+                                    </div>
+
+                                    <div id="mcpToolDescBox" style="background: rgba(99,102,241,0.05); border: 1px solid rgba(99,102,241,0.15); border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; font-size: 0.78rem; color: var(--text-muted);">
+                                        <strong>Description:</strong> Retrieve user accounts, emails, roles, and status from the external HR &amp; Identity web app.
+                                    </div>
+
+                                    <div>
+                                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.3rem;">PARAMETERS (JSON)</label>
+                                        <textarea id="txtMcpExternalParams" class="btn btn-secondary" style="width: 100%; min-height: 110px; font-family: monospace; font-size: 0.8rem; text-align: left; background: var(--bg-input); resize: vertical; line-height: 1.4;">{
+  "role": "DevOps",
+  "limit": 5
+}</textarea>
+                                    </div>
+
+                                    <div style="display: flex; gap: 0.5rem; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+                                        <button class="btn btn-secondary btn-sm" onclick="resetSampleParams()">🔄 Load Sample Params</button>
+                                        <button class="btn btn-primary" id="btnMcpExecuteFetch" onclick="askExternalDataUI()" style="padding: 0.6rem 1.4rem;">
+                                            📥 Ask &amp; Take Data
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Accordion: Dispatch Computational Task -->
+                                <details style="margin-top: 1.25rem; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.75rem;">
+                                    <summary style="font-size: 0.82rem; font-weight: 700; color: var(--primary); cursor: pointer; user-select: none;">
+                                        🚀 Dispatch Task / Computational Job to External Web App ▾
+                                    </summary>
+                                    <div style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.65rem;">
+                                        <div>
+                                            <label style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted);">TASK / TOOL NAME</label>
+                                            <input type="text" id="txtMcpTaskName" class="btn btn-secondary" style="width: 100%; text-align: left; background: var(--bg-input); font-size: 0.8rem;" value="execute_external_task">
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted);">TASK PAYLOAD (JSON)</label>
+                                            <textarea id="txtMcpTaskPayload" class="btn btn-secondary" style="width: 100%; min-height: 80px; font-family: monospace; font-size: 0.78rem; text-align: left; background: var(--bg-input);">{
+  "taskType": "SYNC_RECORDS",
+  "priority": "HIGH",
+  "maxRetries": 3
+}</textarea>
+                                        </div>
+                                        <button class="btn btn-secondary" onclick="dispatchExternalTaskUI()" style="align-self: flex-end;">
+                                            🚀 Dispatch Task
+                                        </button>
+                                    </div>
+                                </details>
+                            </div>
+
+                            <!-- Column 2: Data Taken Viewer -->
+                            <div class="metric-card" style="display: flex; flex-direction: column;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+                                    <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
+                                        <span>📊</span> Data Received from External Web App
+                                    </h3>
+                                    <div style="display: flex; gap: 0.4rem; align-items: center;">
+                                        <span id="mcpFetchLatencyBadge" class="status-pill status-PASS" style="display: none;">0ms</span>
+                                        <button class="btn btn-secondary btn-sm" onclick="copyMcpResult()">📋 Copy JSON</button>
+                                    </div>
+                                </div>
+                                <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.85rem;">
+                                    Parsed structured response received over Model Context Protocol (MCP).
+                                </div>
+
+                                <!-- Visual Summary Cards Container -->
+                                <div id="mcpVisualCardsContainer" style="display: none; margin-bottom: 1rem;"></div>
+
+                                <!-- Raw JSON Response Viewer -->
+                                <pre id="txtMcpResultViewer" style="flex: 1; min-height: 260px; max-height: 480px; overflow: auto; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.85rem; font-family: monospace; font-size: 0.8rem; color: var(--text-main); white-space: pre-wrap; word-break: break-all;">No external data requested yet. Click 'Ask &amp; Take Data' above to query the external web app.</pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ============================================================== -->
+                    <!-- SUB-TAB 2: SHARE DATA TO OTHER WEB APPS (WATCHTOWER AS SERVER) -->
+                    <!-- ============================================================== -->
+                    <div id="mcpSubTabShareData" style="display: none; flex-direction: column; gap: 1.5rem;">
+                        <!-- Server Endpoints Card -->
+                        <div class="metric-card" style="border-left: 4px solid var(--primary);">
+                            <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.4rem;">
+                                <span>📤</span> Watchtower Open MCP Server Endpoints
+                            </h3>
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
+                                Any external web app, autonomous agent, or AI assistant (Claude Desktop, Cursor, Antigravity, custom backend) can connect to Watchtower using these standard MCP endpoints:
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
+                                <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.85rem;">
+                                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--primary); margin-bottom: 0.2rem;">HTTP JSON-RPC 2.0 (FRONTEND PROXY)</div>
+                                    <div style="font-family: monospace; font-size: 0.85rem; color: var(--text-main); font-weight: 600;">http://localhost:5000/api/v1/mcp</div>
+                                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.3rem;">Direct SPA proxy · Zero auth · CORS '*'</div>
+                                </div>
+                                <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.85rem;">
+                                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--primary); margin-bottom: 0.2rem;">HTTP JSON-RPC 2.0 (CORE BACKEND)</div>
+                                    <div style="font-family: monospace; font-size: 0.85rem; color: var(--text-main); font-weight: 600;">http://localhost:3000/api/v1/mcp</div>
+                                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.3rem;">Direct API engine · Zero auth · Fast path</div>
+                                </div>
+                                <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.85rem;">
+                                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--primary); margin-bottom: 0.2rem;">SERVER-SENT EVENTS (SSE) STREAM</div>
+                                    <div style="font-family: monospace; font-size: 0.85rem; color: var(--text-main); font-weight: 600;">http://localhost:5000/api/v1/mcp/sse</div>
+                                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.3rem;">Persistent event stream · Claude Desktop compatible</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2-Column: Live Inbound Simulation Runner & Ingest Data Form -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1.5rem;">
+                            <!-- Column 1: Test Inbound Sharing Runner -->
+                            <div class="metric-card">
+                                <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 0.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
+                                    <span>⚡</span> Simulate Incoming MCP Request
+                                </h3>
+                                <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem;">
+                                    Test what data Watchtower shares with other web apps when they call any of Watchtower's inbound MCP tools.
+                                </div>
+
+                                <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+                                    <div>
+                                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.3rem;">SELECT WATCHTOWER MCP TOOL</label>
+                                        <select id="selMcpInboundTool" class="btn btn-secondary" style="width: 100%; text-align: left; background: var(--bg-input); font-size: 0.85rem;" onchange="onInboundToolSelected()">
+                                            <option value="get_platform_overview">get_platform_overview (Global platform metrics &amp; health)</option>
+                                            <option value="get_registered_agents">get_registered_agents (Fleet registry &amp; metadata)</option>
+                                            <option value="get_agent_telemetry">get_agent_telemetry (Uptime, latency, request stats)</option>
+                                            <option value="get_compliance_history">get_compliance_history (9-rule compliance evaluations)</option>
+                                            <option value="verify_agent_nine_rules">verify_agent_nine_rules (Audit agent against 9 criteria)</option>
+                                            <option value="trigger_agent_health_check">trigger_agent_health_check (Ping target URL/endpoint)</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.3rem;">ARGUMENTS (JSON)</label>
+                                        <textarea id="txtMcpInboundParams" class="btn btn-secondary" style="width: 100%; min-height: 90px; font-family: monospace; font-size: 0.8rem; text-align: left; background: var(--bg-input); resize: vertical;">{}</textarea>
+                                    </div>
+
+                                    <button class="btn btn-primary" onclick="simulateInboundMcpUI()" style="align-self: flex-end;">
+                                        ⚡ Run Inbound Simulation
+                                    </button>
+
+                                    <!-- Inbound Result Pre -->
+                                    <pre id="txtMcpInboundResult" style="min-height: 160px; max-height: 300px; overflow: auto; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.75rem; font-family: monospace; font-size: 0.78rem; color: var(--text-main); white-space: pre-wrap; word-break: break-all;">Select a tool and click 'Run Inbound Simulation' to view the shared data payload.</pre>
+                                </div>
+                            </div>
+
+                            <!-- Column 2: Push Data into Watchtower Form -->
+                            <div class="metric-card">
+                                <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 0.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
+                                    <span>📥</span> Push / Ingest External Data into Watchtower
+                                </h3>
+                                <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem;">
+                                    Allows an external web app to push metrics, error logs, or audit events into Watchtower via MCP or REST.
+                                </div>
+
+                                <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                                        <div>
+                                            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.3rem;">SOURCE WEB APP</label>
+                                            <input type="text" id="txtMcpIngestSource" class="btn btn-secondary" style="width: 100%; text-align: left; background: var(--bg-input); font-size: 0.82rem;" value="Enterprise Billing Portal">
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.3rem;">DATA TYPE</label>
+                                            <select id="selMcpIngestType" class="btn btn-secondary" style="width: 100%; text-align: left; background: var(--bg-input); font-size: 0.82rem;">
+                                                <option value="telemetry">Telemetry &amp; Latency</option>
+                                                <option value="audit">Security Audit Event</option>
+                                                <option value="log">Error / Warning Log</option>
+                                                <option value="metric">System Metric</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.3rem;">PAYLOAD (JSON)</label>
+                                        <textarea id="txtMcpIngestPayload" class="btn btn-secondary" style="width: 100%; min-height: 100px; font-family: monospace; font-size: 0.8rem; text-align: left; background: var(--bg-input);">{
+  "endpoint": "/api/v2/checkout",
+  "activeConnections": 142,
+  "cpuUtilization": "34.2%",
+  "errorRate": 0.001
+}</textarea>
+                                    </div>
+
+                                    <button class="btn btn-emerald" onclick="ingestExternalDataUI()" style="align-self: flex-end;">
+                                        📥 Ingest Data into Watchtower
+                                    </button>
+
+                                    <!-- Recent Shared Records List -->
+                                    <div style="margin-top: 0.5rem;">
+                                        <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.4rem;">RECENTLY INGESTED EXTERNAL RECORDS:</div>
+                                        <div id="mcpSharedRecordsList" style="max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem;">
+                                            <div style="font-size: 0.78rem; color: var(--text-muted); padding: 0.5rem; text-align: center;">No external data ingested yet.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Full Inbound Tool Catalog Grid -->
+                        <div class="metric-card">
+                            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 0.85rem; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
+                                <span>📋</span> Complete Catalog of Inbound MCP Tools (Shared to Other Apps)
+                            </h3>
+                            <div id="mcpInboundToolsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0.85rem;">
+                                <!-- Dynamically populated -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ============================================================== -->
+                    <!-- SUB-TAB 3: LIVE DATA EXCHANGE ACTIVITY CONSOLE -->
+                    <!-- ============================================================== -->
+                    <div id="mcpSubTabActivityLog" style="display: none; flex-direction: column; gap: 1rem;">
+                        <div class="metric-card">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                                <div>
+                                    <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
+                                        <span>📊</span> Real-Time Bidirectional Data Exchange Activity
+                                    </h3>
+                                    <div style="font-size: 0.78rem; color: var(--text-muted);">
+                                        Audit log of all data queries, task dispatches, and incoming MCP calls between Watchtower and external web apps.
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <div style="display: flex; gap: 0.25rem;">
+                                        <button class="btn btn-secondary btn-sm" onclick="filterMcpHistory('')">All</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="filterMcpHistory('INBOUND')">⬅️ Inbound (Shared)</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="filterMcpHistory('OUTBOUND')">➡️ Outbound (Taken)</button>
+                                    </div>
+                                    <button class="btn btn-secondary btn-sm" onclick="fetchMcpExchangeHistoryUI()">🔄 Refresh</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="clearMcpExchangeHistoryUI()">🗑️ Clear</button>
+                                </div>
+                            </div>
+
+                            <div style="overflow-x: auto;">
+                                <table style="width: 100%; font-size: 0.8rem; border-collapse: collapse;">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; color: var(--text-dim); font-size: 0.72rem; text-transform: uppercase;">
+                                            <th style="padding: 0.6rem 0.5rem;">Timestamp</th>
+                                            <th style="padding: 0.6rem 0.5rem;">Direction</th>
+                                            <th style="padding: 0.6rem 0.5rem;">Method / Tool</th>
+                                            <th style="padding: 0.6rem 0.5rem;">Remote App / Endpoint</th>
+                                            <th style="padding: 0.6rem 0.5rem;">Status</th>
+                                            <th style="padding: 0.6rem 0.5rem;">Latency</th>
+                                            <th style="padding: 0.6rem 0.5rem; text-align: right;">Payload &amp; Response</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="mcpExchangeHistoryTableBody">
+                                        <tr>
+                                            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                                                No MCP data exchanges logged yet. Click 'Ask &amp; Take Data' or 'Simulate Inbound Request' to see live exchanges!
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ============================================================== -->
+                    <!-- SUB-TAB 4: QUICK CONNECT GUIDES & CODE SNIPPETS -->
+                    <!-- ============================================================== -->
+                    <div id="mcpSubTabGuides" style="display: none; flex-direction: column; gap: 1.5rem;">
+                        <div class="overview-grid">
+                            <!-- Guide 1: Claude Desktop -->
+                            <div class="metric-card">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                    <strong style="color: var(--primary);">🤖 Claude Desktop Integration</strong>
+                                    <button class="btn btn-secondary btn-sm" onclick="copySnippet('snippetClaudeConfig')">Copy JSON</button>
+                                </div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                                    Add to <code>claude_desktop_config.json</code> under <code>mcpServers</code>:
+                                </div>
+                                <pre id="snippetClaudeConfig" style="background: var(--bg-base); padding: 0.75rem; border-radius: var(--radius-sm); font-size: 0.75rem; color: var(--text-main); overflow-x: auto; font-family: monospace;">{
+  "mcpServers": {
+    "agent-watchtower": {
+      "command": "node",
+      "args": [
+        "${process.cwd().replace(/\\/g, '/')}/packages/agent-nine-rules/mcp-server.js"
+      ]
+    }
+  }
+}</pre>
+                            </div>
+
+                            <!-- Guide 2: Python Web App Client -->
+                            <div class="metric-card">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                    <strong style="color: var(--accent-emerald);">🐍 Python Web App (Ask &amp; Share)</strong>
+                                    <button class="btn btn-secondary btn-sm" onclick="copySnippet('snippetPythonClient')">Copy Python</button>
+                                </div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                                    Query Watchtower from Django, FastAPI, or Flask:
+                                </div>
+                                <pre id="snippetPythonClient" style="background: var(--bg-base); padding: 0.75rem; border-radius: var(--radius-sm); font-size: 0.75rem; color: var(--text-main); overflow-x: auto; font-family: monospace;">import requests
+
+# Ask Watchtower for agent fleet data via MCP
+resp = requests.post("http://localhost:5000/api/v1/mcp", json={
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+        "name": "get_registered_agents",
+        "arguments": { "limit": 10 }
+    }
+})
+agents = resp.json()["result"]["structuredResult"]["agents"]
+print(f"Fetched {len(agents)} agents from Watchtower")</pre>
+                            </div>
+
+                            <!-- Guide 3: Node.js / React / Next.js -->
+                            <div class="metric-card">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                    <strong style="color: var(--accent-cyan);">⚛️ Node.js / Next.js Web App</strong>
+                                    <button class="btn btn-secondary btn-sm" onclick="copySnippet('snippetNodeClient')">Copy JS</button>
+                                </div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                                    Share data or ask Watchtower via native <code>fetch</code>:
+                                </div>
+                                <pre id="snippetNodeClient" style="background: var(--bg-base); padding: 0.75rem; border-radius: var(--radius-sm); font-size: 0.75rem; color: var(--text-main); overflow-x: auto; font-family: monospace;">// Push data from your web app into Watchtower
+await fetch('http://localhost:5000/api/v1/mcp/share-data', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    sourceApp: 'MyPortal-Frontend',
+    dataType: 'telemetry',
+    payload: { pageViews: 1200, avgLatencyMs: 42 }
+  })
+});</pre>
+                            </div>
+
+                            <!-- Guide 4: cURL Terminal Command -->
+                            <div class="metric-card">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                    <strong style="color: var(--accent-purple);">💻 cURL Terminal Testing</strong>
+                                    <button class="btn btn-secondary btn-sm" onclick="copySnippet('snippetCurlCommand')">Copy cURL</button>
+                                </div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                                    Test the MCP endpoint directly from any terminal:
+                                </div>
+                                <pre id="snippetCurlCommand" style="background: var(--bg-base); padding: 0.75rem; border-radius: var(--radius-sm); font-size: 0.75rem; color: var(--text-main); overflow-x: auto; font-family: monospace;">curl -X POST http://localhost:5000/api/v1/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_platform_overview","arguments":{}}}'</pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ============================================================== -->
+                    <!-- SUB-TAB 5: 9-RULE SCANNER FOR WEB APPS & AGENTS VIA MCP -->
+                    <!-- ============================================================== -->
+                    <div id="mcpSubTabScanNineRules" style="display: none; flex-direction: column; gap: 1.5rem;">
+                        <!-- Configuration Card -->
+                        <div class="metric-card" style="border-left: 4px solid var(--primary);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                                <div>
+                                    <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
+                                        <span>🛡️</span> 9-Rule Autonomous Agent &amp; Web App Scanner over MCP
+                                    </h3>
+                                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
+                                        Certify any external web application, microservice, or AI agent against the 9 standard autonomous agent rules via Model Context Protocol. Connect to remote MCP servers, inspect exposed tools, probe live URLs, or evaluate agent code.
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+                                    <span class="status-pill status-PASS" style="font-weight: 700;">CANONICAL 9 RULES</span>
+                                    <span class="status-pill" style="background: rgba(99,102,241,0.12); color: var(--primary); font-weight: 700;">BIDIRECTIONAL MCP</span>
+                                </div>
+                            </div>
+
+                            <!-- Target Type Switcher & Presets -->
+                            <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.85rem 1rem; margin-bottom: 1.25rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                                        <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Scan Mode:</span>
+                                        <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; color: var(--text-main); cursor: pointer; font-weight: 600;">
+                                            <input type="radio" name="radMcpScanType" value="mcp" checked onchange="onMcpScanTypeChanged(this.value)"> 🔌 External MCP Server
+                                        </label>
+                                        <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; color: var(--text-main); cursor: pointer; font-weight: 600;">
+                                            <input type="radio" name="radMcpScanType" value="url" onchange="onMcpScanTypeChanged(this.value)"> 🌐 Live Web App URL / Endpoint
+                                        </label>
+                                        <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; color: var(--text-main); cursor: pointer; font-weight: 600;">
+                                            <input type="radio" name="radMcpScanType" value="code" onchange="onMcpScanTypeChanged(this.value)"> 📄 Source Code / Manifest
+                                        </label>
+                                    </div>
+                                    <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+                                        <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Presets:</span>
+                                        <button class="btn btn-secondary btn-sm" onclick="applyMcpScannerPreset('mock')">🏢 Acme Web App (Mock Simulator)</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="applyMcpScannerPreset('live')">🌐 Live Web App Link (:5000)</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="applyMcpScannerPreset('agent')">🤖 Remote Agent Worker (:4001)</button>
+                                    </div>
+                                </div>
+
+                                <!-- Input row -->
+                                <div id="mcpScanUrlRow" style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 0.85rem;">
+                                    <div>
+                                        <label id="lblMcpScanTarget" style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">External MCP Server Endpoint *</label>
+                                        <div style="display: flex; gap: 0.4rem;">
+                                            <input type="text" id="txtMcpScanEndpoint" class="btn btn-secondary" style="flex: 1; text-align: left; background: var(--bg-input); font-family: monospace; font-size: 0.85rem;" value="http://localhost:5000/api/v1/mcp/mock-external-app" placeholder="http://remote-app:8000/mcp">
+                                            <button class="btn btn-secondary btn-sm" onclick="testMcpScannerConnUI()">⚡ Probe Latency</button>
+                                            <button class="btn btn-secondary btn-sm" onclick="discoverMcpScannerToolsUI()">🔍 Discover Tools</button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">Application / Agent Name</label>
+                                        <input type="text" id="txtMcpScanAppName" class="btn btn-secondary" style="width: 100%; text-align: left; background: var(--bg-input); font-size: 0.85rem;" value="Acme Enterprise Web App">
+                                    </div>
+                                </div>
+
+                                <!-- Code input row (only visible in code mode) -->
+                                <div id="mcpScanCodeRow" style="display: none; margin-bottom: 0.85rem;">
+                                    <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">Source Code / Script Content for AST 9-Rule Scan</label>
+                                    <textarea id="txtMcpScanCode" class="btn btn-secondary" style="width: 100%; min-height: 120px; font-family: monospace; font-size: 0.8rem; text-align: left; background: var(--bg-input); resize: vertical;" placeholder="// Paste JavaScript, Python, or TypeScript agent / web app code..."></textarea>
+                                </div>
+
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 0.85rem;">
+                                    <div>
+                                        <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">Cognitive AI Model (Rule 2)</label>
+                                        <input type="text" id="txtMcpScanModel" class="btn btn-secondary" style="width: 100%; text-align: left; background: var(--bg-input); font-size: 0.85rem;" value="gpt-4o" placeholder="gpt-4o, claude-3-5-sonnet">
+                                    </div>
+                                    <div>
+                                        <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">Integrated Tools / Capabilities (Rule 4)</label>
+                                        <input type="text" id="txtMcpScanTools" class="btn btn-secondary" style="width: 100%; text-align: left; background: var(--bg-input); font-size: 0.85rem;" placeholder="Discovered automatically or comma-separated">
+                                    </div>
+                                </div>
+
+                                <div style="margin-bottom: 0.85rem;">
+                                    <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase;">Declared Purpose / Task Goal (Rule 1)</label>
+                                    <textarea id="txtMcpScanPurpose" rows="2" class="btn btn-secondary" style="width: 100%; text-align: left; background: var(--bg-input); font-size: 0.82rem; resize: vertical;">Enterprise operations web application exposing billing, invoice generation, customer lookup, and analytics tools via Model Context Protocol</textarea>
+                                </div>
+
+                                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                                    <div id="mcpScannerConnFeedback" style="font-size: 0.78rem; color: var(--text-muted);">
+                                        Ready to initiate 9-rule compliance audit via MCP protocol.
+                                    </div>
+                                    <button class="btn btn-primary" id="btnExecuteMcpNineScan" onclick="executeMcpNineScanUI()" style="font-weight: 700; padding: 0.65rem 1.6rem; display: flex; align-items: center; gap: 0.5rem; background: linear-gradient(135deg, #10b981, #059669); border: none; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);">
+                                        <span>🚀</span> Scan External App via MCP &amp; Give 9-Rule Output
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 9-Rule Evaluation Output Area -->
+                        <div id="mcpScanResultsContainer" style="display: none; flex-direction: column; gap: 1.25rem;">
+                            <!-- Output Header Card -->
+                            <div class="metric-card" style="border-left: 5px solid var(--accent-emerald);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.75rem;">
+                                    <div>
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                                            <h3 style="font-size: 1.2rem; font-weight: 800; color: var(--text-main); margin: 0;" id="mcpScanResultTitle">🛡️ 9-Rule MCP Audit Report: Acme Enterprise Web App</h3>
+                                            <span id="mcpScanResultStatusPill" class="status-pill status-PASS" style="font-weight: 800;">COMPLIANT</span>
+                                            <span id="mcpScanResultRecPill" class="status-pill status-PASS" style="font-weight: 800;">KEEP</span>
+                                        </div>
+                                        <div id="mcpScanResultSubtitle" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">
+                                            Audit completed via Model Context Protocol · Canonical Evaluation Engine
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                                        <button class="btn btn-secondary btn-sm" onclick="copyMcpScanReportJSON()">📋 Copy JSON Report</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="switchMcpSubTab('activityLog')">📜 View in Exchange Log</button>
+                                    </div>
+                                </div>
+
+                                <!-- Score & KPI Strip -->
+                                <div class="overview-grid" style="margin-bottom: 1rem;">
+                                    <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.85rem; text-align: center;">
+                                        <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Compliance Score</div>
+                                        <div id="mcpScanScoreVal" style="font-size: 1.8rem; font-weight: 800; color: var(--accent-emerald);">89%</div>
+                                        <div style="font-size: 0.72rem; color: var(--text-dim);" id="mcpScanScoreBar">Weighted Score</div>
+                                    </div>
+                                    <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.85rem; text-align: center;">
+                                        <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Rules Followed</div>
+                                        <div id="mcpScanPassedVal" style="font-size: 1.8rem; font-weight: 800; color: var(--accent-emerald);">8 / 9</div>
+                                        <div style="font-size: 0.72rem; color: var(--text-dim);">Passed Criteria</div>
+                                    </div>
+                                    <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.85rem; text-align: center;">
+                                        <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Missing / Non-Compliant</div>
+                                        <div id="mcpScanMissingVal" style="font-size: 1.8rem; font-weight: 800; color: var(--accent-rose);">0</div>
+                                        <div style="font-size: 0.72rem; color: var(--text-dim);">Action Needed</div>
+                                    </div>
+                                    <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.85rem; text-align: center;">
+                                        <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Protocol Latency</div>
+                                        <div id="mcpScanLatencyVal" style="font-size: 1.8rem; font-weight: 800; color: var(--primary);">32ms</div>
+                                        <div style="font-size: 0.72rem; color: var(--text-dim);">JSON-RPC Handshake</div>
+                                    </div>
+                                </div>
+
+                                <!-- MCP Inspection Metadata (Discovered Tools, Server Info) -->
+                                <div id="mcpInspectionBox" style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.85rem 1rem; margin-bottom: 1.25rem;">
+                                    <!-- Populated dynamically -->
+                                </div>
+
+                                <!-- 9 Canonical Rules Grid -->
+                                <div>
+                                    <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;">
+                                        📋 Detailed 9-Rule Criteria Evaluation Output
+                                    </h4>
+                                    <div id="mcpRulesGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0.85rem;">
+                                        <!-- Dynamically populated with all 9 rule cards -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -5016,7 +5724,8 @@
             investigation: { title: 'Investigation Center & Operational Knowledge Graph', breadcrumb: 'AGENT WATCHTOWER / INTELLIGENCE / Investigation Center' },
             operations: { title: 'Production Operations & Lifecycle', breadcrumb: 'AGENT WATCHTOWER / SYSTEM / Operations' },
             audit: { title: 'Audit Logs & Security History', breadcrumb: 'AGENT WATCHTOWER / SYSTEM / Audit Logs' },
-            settings: { title: 'Platform Settings', breadcrumb: 'AGENT WATCHTOWER / SYSTEM / Settings' }
+            settings: { title: 'Platform Settings', breadcrumb: 'AGENT WATCHTOWER / SYSTEM / Settings' },
+            mcp: { title: 'Model Context Protocol (MCP) Hub — Bidirectional Data Exchange', breadcrumb: 'AGENT WATCHTOWER / CONNECTIVITY / Bidirectional MCP Hub' }
         };
 
         function refreshActiveTab() {
@@ -5088,6 +5797,7 @@
             if (tab === 'agentMonitoring') fetchAgentMonitoringOverview();
             if (tab === 'audit') fetchAuditOverviewUI();
             if (tab === 'settings') fetchPlatformSettings();
+            if (tab === 'mcp') fetchMcpOverviewUI();
         }
 
         // Helper string escape for safe HTML injection
@@ -6963,20 +7673,117 @@
             const btnLink = document.getElementById('btnModeNineLink');
             const btnFile = document.getElementById('btnModeNineFile');
             const btnAgent = document.getElementById('btnModeNineAgent');
+            const btnMcp = document.getElementById('btnModeNineMcp');
             const boxLink = document.getElementById('nineModeLinkContainer');
             const boxFile = document.getElementById('nineModeFileContainer');
             const boxAgent = document.getElementById('nineModeAgentContainer');
+            const boxMcp = document.getElementById('nineModeMcpContainer');
 
             if (btnLink) btnLink.className = mode === 'link' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
             if (btnFile) btnFile.className = mode === 'file' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
             if (btnAgent) btnAgent.className = mode === 'agent' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+            if (btnMcp) btnMcp.className = mode === 'mcp' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
 
             if (boxLink) boxLink.style.display = mode === 'link' ? 'block' : 'none';
             if (boxFile) boxFile.style.display = mode === 'file' ? 'block' : 'none';
             if (boxAgent) boxAgent.style.display = mode === 'agent' ? 'block' : 'none';
+            if (boxMcp) boxMcp.style.display = mode === 'mcp' ? 'block' : 'none';
 
             if (mode === 'agent') {
                 populateNineRulesAgentDropdown();
+            }
+        }
+
+        function setNineMcpPreset(url, name, purpose, model) {
+            const ep = document.getElementById('nineMcpInputServerUrl');
+            const app = document.getElementById('nineMcpInputAppName');
+            const purp = document.getElementById('nineMcpInputPurpose');
+            const mod = document.getElementById('nineMcpInputModel');
+            if (ep) ep.value = url.startsWith('/') ? window.location.origin + url : url;
+            if (app) app.value = name;
+            if (purp) purp.value = purpose;
+            if (mod) mod.value = model;
+            testNineMcpConnectionUI();
+        }
+
+        async function testNineMcpConnectionUI() {
+            const ep = document.getElementById('nineMcpInputServerUrl');
+            const hint = document.getElementById('nineMcpProbeStatusHint');
+            if (!ep || !hint) return;
+            const targetUrl = ep.value.trim();
+            hint.innerHTML = '<span style="color: var(--primary);">⏳ Probing endpoint...</span>';
+            try {
+                const res = await fetch('/api/v1/mcp/external/test-connection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ serverUrl: targetUrl })
+                });
+                const json = await res.json();
+                if (json.success && json.data && json.data.connected) {
+                    hint.innerHTML = `<span style="color: var(--accent-emerald); font-weight: 700;">✅ Connected successfully (${json.data.latencyMs}ms latency)</span>`;
+                } else {
+                    hint.innerHTML = `<span style="color: var(--accent-amber);">⚠️ Endpoint reachable but returned status: ${json.data ? json.data.statusCode : 'unknown'}</span>`;
+                }
+            } catch (err) {
+                hint.innerHTML = `<span style="color: var(--accent-rose);">❌ Connection probe failed: ${escapeHtml(err.message)}</span>`;
+            }
+        }
+
+        async function runNineRulesMcpScan() {
+            const ep = document.getElementById('nineMcpInputServerUrl');
+            const app = document.getElementById('nineMcpInputAppName');
+            const mod = document.getElementById('nineMcpInputModel');
+            const tools = document.getElementById('nineMcpInputTools');
+            const purp = document.getElementById('nineMcpInputPurpose');
+            const btn = document.getElementById('btnRunNineMcpScan');
+
+            const serverUrl = ep ? ep.value.trim() : '';
+            if (!serverUrl) {
+                alert('Please enter an external MCP server URL or endpoint.');
+                if (ep) ep.focus();
+                return;
+            }
+
+            const name = (app ? app.value.trim() : '') || 'External MCP Application';
+            const model = (mod ? mod.value.trim() : '') || 'External LLM';
+            const toolsStr = tools ? tools.value.trim() : '';
+            const purpose = (purp ? purp.value.trim() : '') || `External application connected via MCP at ${serverUrl}`;
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span>⏳</span> Connecting &amp; Evaluating 9 Rules...';
+            }
+
+            try {
+                const res = await fetch('/api/v1/mcp/scan-app', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        serverUrl,
+                        name,
+                        model,
+                        tools: toolsStr,
+                        purpose
+                    })
+                });
+                const json = await res.json();
+                if (json.success && json.data) {
+                    handleScanResultSuccess(json.data, {
+                        target: name,
+                        targetUrl: serverUrl,
+                        method: 'MCP 9-Rule Scan',
+                        type: 'MCP_APP'
+                    });
+                } else {
+                    alert('MCP 9-Rule scan error: ' + (json.error ? json.error.message : 'Unknown response'));
+                }
+            } catch (err) {
+                alert('Scan request failed: ' + err.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🚀</span> Scan External App via MCP &amp; Give 9-Rule Output';
+                }
             }
         }
 
@@ -13024,6 +13831,1018 @@ async function fetchHealthOverview() {
                 console.error('Investigation Error:', err);
                 alert(`Investigation Error: ${err.message}`);
             }
+        }
+
+        // ==============================================================================
+        // BIDIRECTIONAL MODEL CONTEXT PROTOCOL (MCP) INTEGRATION HUB JAVASCRIPT
+        // ==============================================================================
+
+        let mcpDiscoveredTools = [];
+        let mcpCachedHistory = [];
+        let currentMcpHistoryFilter = '';
+        let currentMcpScanReport = null;
+
+        function switchMcpSubTab(subTab) {
+            const tabs = ['askData', 'shareData', 'activityLog', 'guides', 'scanNineRules'];
+            tabs.forEach(t => {
+                const pane = document.getElementById('mcpSubTab' + t.charAt(0).toUpperCase() + t.slice(1));
+                let btn = null;
+                if (t === 'askData') btn = document.getElementById('btnMcpSubTabAsk');
+                else if (t === 'shareData') btn = document.getElementById('btnMcpSubTabShare');
+                else if (t === 'activityLog') btn = document.getElementById('btnMcpSubTabLog');
+                else if (t === 'guides') btn = document.getElementById('btnMcpSubTabGuides');
+                else if (t === 'scanNineRules') btn = document.getElementById('btnMcpSubTabScan');
+
+                if (pane) pane.style.display = (t === subTab) ? 'flex' : 'none';
+                if (btn) {
+                    if (t === subTab) {
+                        btn.style.background = 'var(--bg-card)';
+                        btn.style.color = 'var(--primary)';
+                        btn.style.fontWeight = '700';
+                        btn.style.borderBottom = '2px solid var(--primary)';
+                        btn.style.marginBottom = '-2px';
+                    } else {
+                        btn.style.background = 'transparent';
+                        btn.style.color = 'var(--text-muted)';
+                        btn.style.fontWeight = '600';
+                        btn.style.borderBottom = 'none';
+                        btn.style.marginBottom = '0';
+                    }
+                }
+            });
+
+            if (subTab === 'activityLog') {
+                fetchMcpExchangeHistoryUI();
+            } else if (subTab === 'shareData') {
+                fetchMcpInboundToolsUI();
+                fetchSharedRecordsListUI();
+            }
+        }
+
+        // ==============================================================
+        // 9-RULE SCANNER FOR EXTERNAL APPS / AGENTS OVER MCP CONTROLLER
+        // ==============================================================
+        function onMcpScanTypeChanged(type) {
+            const urlRow = document.getElementById('mcpScanUrlRow');
+            const codeRow = document.getElementById('mcpScanCodeRow');
+            const lblTarget = document.getElementById('lblMcpScanTarget');
+            const txtEndpoint = document.getElementById('txtMcpScanEndpoint');
+
+            if (type === 'code') {
+                if (urlRow) urlRow.style.display = 'none';
+                if (codeRow) codeRow.style.display = 'block';
+            } else {
+                if (urlRow) urlRow.style.display = 'grid';
+                if (codeRow) codeRow.style.display = 'none';
+                if (type === 'url') {
+                    if (lblTarget) lblTarget.innerText = 'Live Web App URL / HTTP Endpoint *';
+                    if (txtEndpoint) {
+                        txtEndpoint.placeholder = 'http://localhost:5000/mock-app or https://my-agent.com';
+                        if (txtEndpoint.value.includes('/mcp')) {
+                            txtEndpoint.value = 'http://localhost:5000/mock-app';
+                        }
+                    }
+                } else {
+                    if (lblTarget) lblTarget.innerText = 'External MCP Server Endpoint *';
+                    if (txtEndpoint) {
+                        txtEndpoint.placeholder = 'http://localhost:5000/api/v1/mcp/mock-external-app';
+                        if (!txtEndpoint.value.includes('/mcp')) {
+                            txtEndpoint.value = 'http://localhost:5000/api/v1/mcp/mock-external-app';
+                        }
+                    }
+                }
+            }
+        }
+
+        function applyMcpScannerPreset(preset) {
+            const txtEndpoint = document.getElementById('txtMcpScanEndpoint');
+            const txtAppName = document.getElementById('txtMcpScanAppName');
+            const txtModel = document.getElementById('txtMcpScanModel');
+            const txtPurpose = document.getElementById('txtMcpScanPurpose');
+            const radMcp = document.querySelector('input[name="radMcpScanType"][value="mcp"]');
+            const radUrl = document.querySelector('input[name="radMcpScanType"][value="url"]');
+
+            if (preset === 'mock') {
+                if (radMcp) radMcp.checked = true;
+                onMcpScanTypeChanged('mcp');
+                if (txtEndpoint) txtEndpoint.value = window.location.origin + '/api/v1/mcp/mock-external-app';
+                if (txtAppName) txtAppName.value = 'Acme Enterprise Web App (Mock Simulator)';
+                if (txtModel) txtModel.value = 'gpt-4o';
+                if (txtPurpose) txtPurpose.value = 'Enterprise operations web app exposing billing, inventory, and user directory tools via Model Context Protocol';
+                testMcpScannerConnUI();
+                discoverMcpScannerToolsUI();
+            } else if (preset === 'live') {
+                if (radUrl) radUrl.checked = true;
+                onMcpScanTypeChanged('url');
+                if (txtEndpoint) txtEndpoint.value = window.location.origin + '/mock-app';
+                if (txtAppName) txtAppName.value = 'Sample Autonomous Web App (:5000)';
+                if (txtModel) txtModel.value = 'claude-3-5-sonnet';
+                if (txtPurpose) txtPurpose.value = 'Autonomous web application monitoring system health and executing auto-remediation actions';
+                testMcpScannerConnUI();
+            } else if (preset === 'agent') {
+                if (radMcp) radMcp.checked = true;
+                onMcpScanTypeChanged('mcp');
+                if (txtEndpoint) txtEndpoint.value = 'http://localhost:4001/mcp';
+                if (txtAppName) txtAppName.value = 'Remote Agent Worker (:4001)';
+                if (txtModel) txtModel.value = 'gemini-1.5-pro';
+                if (txtPurpose) txtPurpose.value = 'Autonomous worker agent performing telemetry analysis, batch jobs, and context-aware tool calls';
+                testMcpScannerConnUI();
+            }
+        }
+
+        async function testMcpScannerConnUI() {
+            const txtEndpoint = document.getElementById('txtMcpScanEndpoint');
+            const feedback = document.getElementById('mcpScannerConnFeedback');
+            if (!txtEndpoint || !feedback) return;
+            const targetUrl = txtEndpoint.value.trim();
+            if (!targetUrl) {
+                feedback.innerHTML = '<span style="color: var(--accent-rose);">Please enter a target URL/endpoint first.</span>';
+                return;
+            }
+            feedback.innerHTML = '<span style="color: var(--primary);">⏳ Probing endpoint connectivity...</span>';
+            try {
+                const res = await fetch('/api/v1/mcp/external/test-connection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ serverUrl: targetUrl })
+                });
+                const json = await res.json();
+                if (json.success && json.data && json.data.connected) {
+                    feedback.innerHTML = `<span style="color: var(--accent-emerald); font-weight: 700;">✅ Handshake successful (${json.data.latencyMs}ms latency) · Protocol ready</span>`;
+                } else {
+                    feedback.innerHTML = `<span style="color: var(--accent-amber);">⚠️ Endpoint reached (${json.data ? json.data.latencyMs : 0}ms) — Server status: ${json.data ? json.data.statusCode : 'Uncertain'}</span>`;
+                }
+            } catch (err) {
+                feedback.innerHTML = `<span style="color: var(--accent-rose);">❌ Connection probe failed: ${escapeHtml(err.message)}</span>`;
+            }
+        }
+
+        async function discoverMcpScannerToolsUI() {
+            const txtEndpoint = document.getElementById('txtMcpScanEndpoint');
+            const txtTools = document.getElementById('txtMcpScanTools');
+            const feedback = document.getElementById('mcpScannerConnFeedback');
+            if (!txtEndpoint) return;
+            const targetUrl = txtEndpoint.value.trim();
+            if (!targetUrl) return;
+
+            if (feedback) feedback.innerHTML = '<span style="color: var(--primary);">🔍 Discovering MCP tools via tools/list...</span>';
+            try {
+                const res = await fetch('/api/v1/mcp/external/discover', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ serverUrl: targetUrl })
+                });
+                const json = await res.json();
+                if (json.success && Array.isArray(json.tools) && json.tools.length > 0) {
+                    const toolNames = json.tools.map(t => t.name).join(', ');
+                    if (txtTools) txtTools.value = toolNames;
+                    if (feedback) feedback.innerHTML = `<span style="color: var(--accent-emerald); font-weight: 700;">⚡ Discovered ${json.tools.length} MCP tools:</span> <span style="font-family: monospace; font-size: 0.75rem; color: var(--text-main);">${escapeHtml(toolNames)}</span>`;
+                } else {
+                    if (feedback) feedback.innerHTML = '<span style="color: var(--text-dim);">No tools returned from MCP discovery. Tools can still be specified manually.</span>';
+                }
+            } catch (err) {
+                if (feedback) feedback.innerHTML = `<span style="color: var(--accent-amber);">⚠️ Could not discover tools automatically: ${escapeHtml(err.message)}</span>`;
+            }
+        }
+
+        async function executeMcpNineScanUI() {
+            const radType = document.querySelector('input[name="radMcpScanType"]:checked');
+            const scanType = radType ? radType.value : 'mcp';
+            const txtEndpoint = document.getElementById('txtMcpScanEndpoint');
+            const txtAppName = document.getElementById('txtMcpScanAppName');
+            const txtModel = document.getElementById('txtMcpScanModel');
+            const txtTools = document.getElementById('txtMcpScanTools');
+            const txtPurpose = document.getElementById('txtMcpScanPurpose');
+            const txtCode = document.getElementById('txtMcpScanCode');
+            const btn = document.getElementById('btnExecuteMcpNineScan');
+            const feedback = document.getElementById('mcpScannerConnFeedback');
+
+            const appName = (txtAppName ? txtAppName.value.trim() : '') || 'External App';
+            const model = txtModel ? txtModel.value.trim() : 'gpt-4o';
+            const tools = txtTools ? txtTools.value.trim() : '';
+            const purpose = txtPurpose ? txtPurpose.value.trim() : '';
+            const code = txtCode ? txtCode.value.trim() : '';
+
+            let payload = {
+                name: appName,
+                model,
+                tools,
+                purpose
+            };
+
+            if (scanType === 'mcp') {
+                const endpoint = txtEndpoint ? txtEndpoint.value.trim() : '';
+                if (!endpoint) {
+                    alert('Please enter an external MCP server endpoint.');
+                    if (txtEndpoint) txtEndpoint.focus();
+                    return;
+                }
+                payload.serverUrl = endpoint;
+            } else if (scanType === 'url') {
+                const endpoint = txtEndpoint ? txtEndpoint.value.trim() : '';
+                if (!endpoint) {
+                    alert('Please enter a web app URL or endpoint.');
+                    if (txtEndpoint) txtEndpoint.focus();
+                    return;
+                }
+                payload.url = endpoint;
+            } else if (scanType === 'code') {
+                if (!code) {
+                    alert('Please paste the source code or script to scan.');
+                    if (txtCode) txtCode.focus();
+                    return;
+                }
+                payload.code = code;
+            }
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span>⏳</span> Scanning External App &amp; Evaluating 9 Rules...';
+            }
+            if (feedback) {
+                feedback.innerHTML = '<span style="color: var(--primary);">🚀 Establishing protocol connection &amp; evaluating all 9 criteria...</span>';
+            }
+
+            const startTime = Date.now();
+            try {
+                const res = await fetch('/api/v1/mcp/scan-app', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const json = await res.json();
+                const latency = Date.now() - startTime;
+
+                if (json.success && json.data) {
+                    currentMcpScanReport = json.data;
+                    renderMcpScanResults(json.data, {
+                        target: appName,
+                        targetUrl: payload.serverUrl || payload.url || 'Source Code',
+                        scanMode: json.scanMode || scanType.toUpperCase(),
+                        latencyMs: json.latencyMs || latency
+                    });
+                    if (feedback) {
+                        feedback.innerHTML = `<span style="color: var(--accent-emerald); font-weight: 700;">✅ 9-Rule Scan complete in ${latency}ms! Overall Status: ${json.data.status} (${json.data.complianceScore}%)</span>`;
+                    }
+                    // Refresh history in background
+                    fetchMcpOverviewUI();
+                } else {
+                    alert('MCP 9-Rule Scan error: ' + (json.error ? json.error.message : 'Unknown response'));
+                    if (feedback) feedback.innerHTML = `<span style="color: var(--accent-rose);">❌ Scan failed: ${escapeHtml(json.error ? json.error.message : 'Unknown error')}</span>`;
+                }
+            } catch (err) {
+                alert('Request failed: ' + err.message);
+                if (feedback) feedback.innerHTML = `<span style="color: var(--accent-rose);">❌ Network error: ${escapeHtml(err.message)}</span>`;
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🚀</span> Scan External App via MCP &amp; Give 9-Rule Output';
+                }
+            }
+        }
+
+        function renderMcpScanResults(report, meta = {}) {
+            const container = document.getElementById('mcpScanResultsContainer');
+            if (!container) return;
+            container.style.display = 'flex';
+
+            const titleEl = document.getElementById('mcpScanResultTitle');
+            const statusPill = document.getElementById('mcpScanResultStatusPill');
+            const recPill = document.getElementById('mcpScanResultRecPill');
+            const subtitleEl = document.getElementById('mcpScanResultSubtitle');
+
+            const scoreVal = document.getElementById('mcpScanScoreVal');
+            const passedVal = document.getElementById('mcpScanPassedVal');
+            const missingVal = document.getElementById('mcpScanMissingVal');
+            const latencyVal = document.getElementById('mcpScanLatencyVal');
+            const inspectionBox = document.getElementById('mcpInspectionBox');
+            const rulesGrid = document.getElementById('mcpRulesGrid');
+
+            const targetName = meta.target || report.agentName || 'External Application';
+            if (titleEl) titleEl.innerText = `🛡️ 9-Rule MCP Audit Report: ${targetName}`;
+
+            const status = report.status || report.overallStatus || 'UNKNOWN';
+            const rec = report.recommendation || 'REVIEW';
+            const score = typeof report.complianceScore === 'number' ? report.complianceScore : 0;
+            const followed = report.rulesFollowedCount !== undefined ? report.rulesFollowedCount : (report.followedRules ? report.followedRules.length : 0);
+            const missing = report.rulesMissingCount !== undefined ? report.rulesMissingCount : (report.missingRules ? report.missingRules.length : 0);
+            const latency = meta.latencyMs || (report.mcpProbe ? report.mcpProbe.latencyMs : (report.webAppProbe ? report.webAppProbe.latencyMs : 24));
+
+            if (statusPill) {
+                statusPill.innerText = status;
+                statusPill.className = 'status-pill ' + (status === 'COMPLIANT' ? 'status-PASS' : (status === 'PARTIALLY_COMPLIANT' ? 'status-SKIPPED' : 'status-FAIL'));
+            }
+            if (recPill) {
+                recPill.innerText = `RECOMMENDATION: ${rec}`;
+                recPill.className = 'status-pill ' + (rec === 'KEEP' ? 'status-PASS' : (rec === 'REVIEW' ? 'status-SKIPPED' : 'status-FAIL'));
+            }
+            if (subtitleEl) {
+                subtitleEl.innerHTML = `Target: <strong style="color: var(--text-main);">${escapeHtml(meta.targetUrl || targetName)}</strong> · Mode: <strong style="color: var(--primary);">${escapeHtml(meta.scanMode || 'MCP')}</strong> · Audited: Just now`;
+            }
+
+            if (scoreVal) {
+                scoreVal.innerText = `${score}%`;
+                scoreVal.style.color = score >= 80 ? 'var(--accent-emerald)' : (score >= 60 ? 'var(--accent-amber)' : 'var(--accent-rose)');
+            }
+            if (passedVal) passedVal.innerText = `${followed} / 9`;
+            if (missingVal) {
+                missingVal.innerText = `${missing}`;
+                missingVal.style.color = missing === 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)';
+            }
+            if (latencyVal) latencyVal.innerText = `${latency}ms`;
+
+            // Inspection Box: Details discovered from external app
+            if (inspectionBox) {
+                let discoveryHtml = '';
+                if (report.mcpProbe) {
+                    const p = report.mcpProbe;
+                    discoveryHtml = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <span style="font-weight: 700; color: var(--primary);">🔌 MCP Protocol Handshake &amp; Inspection:</span>
+                            <span class="status-pill status-PASS" style="font-size: 0.7rem;">JSON-RPC 2.0 CONNECTED</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem; font-size: 0.78rem;">
+                            <div><strong>Remote Server:</strong> ${escapeHtml(p.serverInfo && p.serverInfo.name ? p.serverInfo.name : 'External MCP')} v${escapeHtml(p.serverInfo && p.serverInfo.version ? p.serverInfo.version : '1.0')}</div>
+                            <div><strong>Tools Discovered:</strong> ${p.toolsCount || 0} external tools available</div>
+                            <div><strong>Protocol Version:</strong> ${escapeHtml(p.serverInfo && p.serverInfo.protocolVersion ? p.serverInfo.protocolVersion : '2024-11-05')}</div>
+                            <div><strong>Handshake Latency:</strong> ${p.latencyMs || 0}ms</div>
+                        </div>
+                        ${p.tools && p.tools.length > 0 ? `
+                            <div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted);">
+                                <strong>Discovered Remote Tools:</strong> ${p.tools.map(t => `<code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px; margin-right: 4px; color: var(--accent-cyan);">${escapeHtml(t.name)}</code>`).join(' ')}
+                            </div>
+                        ` : ''}
+                    `;
+                } else if (report.webAppProbe) {
+                    const w = report.webAppProbe;
+                    discoveryHtml = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <span style="font-weight: 700; color: var(--primary);">🌐 Live Web App HTTP Probe:</span>
+                            <span class="status-pill ${w.status === 'HEALTHY' ? 'status-PASS' : 'status-FAIL'}" style="font-size: 0.7rem;">${escapeHtml(w.status)} (${escapeHtml(String(w.statusCode || '200'))})</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem; font-size: 0.78rem;">
+                            <div><strong>Endpoint:</strong> <a href="${escapeHtml(w.url)}" target="_blank" style="color: var(--primary);">${escapeHtml(w.url)}</a></div>
+                            <div><strong>Server Header:</strong> ${escapeHtml(w.headers && w.headers.server ? w.headers.server : 'Web Server')}</div>
+                            <div><strong>Content Type:</strong> ${escapeHtml(w.headers && w.headers.contentType ? w.headers.contentType : 'text/html')}</div>
+                            <div><strong>HTTP Round-Trip:</strong> ${w.latencyMs || 0}ms</div>
+                        </div>
+                    `;
+                } else {
+                    discoveryHtml = `
+                        <div style="font-size: 0.78rem; color: var(--text-muted);">
+                            <strong>Target Identity:</strong> Agent / Web App contract evaluated through static AST &amp; architectural schema inspection.
+                        </div>
+                    `;
+                }
+                inspectionBox.innerHTML = discoveryHtml;
+            }
+
+            // Render all 9 rules
+            if (rulesGrid) {
+                const rules = report.rules || report.allRules || [];
+                if (rules.length === 0) {
+                    rulesGrid.innerHTML = '<div style="color: var(--text-muted); padding: 1rem;">No rule evaluations returned.</div>';
+                    return;
+                }
+
+                rulesGrid.innerHTML = rules.map(r => {
+                    const rNum = r.ruleNumber || r.number || r.id;
+                    const rName = r.name || r.ruleName || `Rule ${rNum}`;
+                    const rStatus = r.status || (r.passed ? 'PASS' : (r.unknown ? 'UNKNOWN' : 'FAIL'));
+                    const isPass = rStatus === 'PASS';
+                    const isUnknown = rStatus === 'UNKNOWN';
+                    const pillClass = isPass ? 'status-PASS' : (isUnknown ? 'status-SKIPPED' : 'status-FAIL');
+
+                    return `
+                        <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-left: 4px solid ${isPass ? 'var(--accent-emerald)' : (isUnknown ? 'var(--accent-amber)' : 'var(--accent-rose)')}; border-radius: var(--radius-sm); padding: 0.95rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.65rem;">
+                            <div>
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.35rem;">
+                                    <div style="font-weight: 800; font-size: 0.86rem; color: var(--text-main);">
+                                        Rule ${escapeHtml(String(rNum))}: ${escapeHtml(rName)}
+                                    </div>
+                                    <span class="status-pill ${pillClass}" style="font-size: 0.65rem; padding: 2px 7px; font-weight: 700;">${escapeHtml(rStatus)}</span>
+                                </div>
+                                <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.35; margin-bottom: 0.4rem;">
+                                    ${escapeHtml(r.rationale || r.description || 'Evaluated standard autonomous agent criteria.')}
+                                </div>
+                                ${r.evidence ? `
+                                    <div style="background: rgba(255,255,255,0.04); border-radius: 4px; padding: 0.35rem 0.55rem; font-size: 0.72rem; color: var(--accent-cyan); font-family: monospace; word-break: break-all;">
+                                        🔍 Evidence: ${escapeHtml(typeof r.evidence === 'string' ? r.evidence : JSON.stringify(r.evidence))}
+                                    </div>
+                                ` : ''}
+                            </div>
+                            ${!isPass && r.remediation ? `
+                                <div style="background: rgba(239,68,68,0.06); border: 1px dashed rgba(239,68,68,0.3); border-radius: 4px; padding: 0.4rem 0.6rem; font-size: 0.72rem; color: var(--accent-rose);">
+                                    🛠️ <strong>Remediation:</strong> ${escapeHtml(r.remediation)}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function copyMcpScanReportJSON() {
+            if (!currentMcpScanReport) {
+                alert('No audit report currently loaded to copy.');
+                return;
+            }
+            navigator.clipboard.writeText(JSON.stringify(currentMcpScanReport, null, 2)).then(() => {
+                alert('Copied 9-rule MCP audit report JSON to clipboard!');
+            }).catch(() => {
+                alert('Could not copy report to clipboard automatically.');
+            });
+        }
+
+        async function fetchMcpOverviewUI() {
+            try {
+                const [statusRes, historyRes, sharedRes] = await Promise.all([
+                    fetch('/api/v1/mcp/status').then(r => r.json()).catch(() => ({})),
+                    fetch('/api/v1/mcp/history?limit=15').then(r => r.json()).catch(() => ({ total: 0, history: [] })),
+                    fetch('/api/v1/mcp/shared-data?limit=5').then(r => r.json()).catch(() => ({ total: 0, data: [] }))
+                ]);
+
+                // Update metric counters
+                const toolsCountEl = document.getElementById('valMcpInboundToolsCount');
+                const outboundStatusEl = document.getElementById('valMcpOutboundStatus');
+                const sharedCountEl = document.getElementById('valMcpSharedRecordsCount');
+                const exchangesCountEl = document.getElementById('valMcpTotalExchanges');
+
+                if (statusRes.bidirectional && statusRes.bidirectional.inboundServer) {
+                    if (toolsCountEl) toolsCountEl.innerText = `${statusRes.bidirectional.inboundServer.toolsAvailable} Tools`;
+                }
+                if (outboundStatusEl) outboundStatusEl.innerText = 'Connected';
+                if (sharedCountEl) sharedCountEl.innerText = `${sharedRes.total || 0} Records`;
+                if (exchangesCountEl) exchangesCountEl.innerText = `${historyRes.total || 0} Exchanges`;
+
+                // Update recent history table
+                if (historyRes.history) {
+                    mcpCachedHistory = historyRes.history;
+                    renderMcpHistoryTable(mcpCachedHistory);
+                }
+
+                // Auto-discover tools if not yet populated
+                if (mcpDiscoveredTools.length === 0) {
+                    discoverExternalToolsUI(true);
+                }
+
+                fetchMcpInboundToolsUI();
+                fetchSharedRecordsListUI();
+            } catch (err) {
+                console.warn('[MCP] Failed to fetch overview:', err.message);
+            }
+        }
+
+        function setExternalMcpUrl(url) {
+            const input = document.getElementById('txtMcpExternalUrl');
+            if (!input) return;
+            if (url.startsWith('/')) {
+                input.value = window.location.origin + url;
+            } else {
+                input.value = url;
+            }
+            testExternalConnectionUI();
+            discoverExternalToolsUI();
+        }
+
+        async function testExternalConnectionUI() {
+            const urlInput = document.getElementById('txtMcpExternalUrl');
+            const badge = document.getElementById('mcpConnStatusBadge');
+            const targetUrl = urlInput ? urlInput.value.trim() : '';
+
+            if (badge) {
+                badge.className = 'status-pill';
+                badge.innerText = 'TESTING...';
+            }
+
+            try {
+                const res = await fetch('/api/v1/mcp/external/test-connection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ serverUrl: targetUrl })
+                });
+                const json = await res.json();
+                if (json.success && json.data && json.data.connected) {
+                    if (badge) {
+                        badge.className = 'status-pill status-PASS';
+                        badge.innerText = `CONNECTED (${json.data.latencyMs}ms)`;
+                    }
+                } else {
+                    if (badge) {
+                        badge.className = 'status-pill status-FAIL';
+                        badge.innerText = 'UNREACHABLE';
+                    }
+                }
+            } catch (err) {
+                if (badge) {
+                    badge.className = 'status-pill status-FAIL';
+                    badge.innerText = 'CONNECTION ERROR';
+                }
+            }
+        }
+
+        async function discoverExternalToolsUI(silent = false) {
+            const urlInput = document.getElementById('txtMcpExternalUrl');
+            const selectEl = document.getElementById('selMcpExternalTool');
+            const targetUrl = urlInput ? urlInput.value.trim() : '';
+
+            try {
+                const res = await fetch('/api/v1/mcp/external/discover', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ serverUrl: targetUrl })
+                });
+                const json = await res.json();
+                if (json.success && Array.isArray(json.tools) && json.tools.length > 0) {
+                    mcpDiscoveredTools = json.tools;
+                    if (selectEl) {
+                        selectEl.innerHTML = mcpDiscoveredTools.map(t => `
+                            <option value="${escapeHtml(t.name)}">${escapeHtml(t.name)} — ${escapeHtml(t.description ? t.description.slice(0, 60) + '...' : '')}</option>
+                        `).join('');
+                    }
+                    onExternalToolSelected();
+                    if (!silent) {
+                        const badge = document.getElementById('mcpConnStatusBadge');
+                        if (badge) {
+                            badge.className = 'status-pill status-PASS';
+                            badge.innerText = `${mcpDiscoveredTools.length} TOOLS DISCOVERED`;
+                        }
+                    }
+                }
+            } catch (err) {
+                if (!silent) console.warn('[MCP] Tool discovery failed:', err.message);
+            }
+        }
+
+        function onExternalToolSelected() {
+            const selectEl = document.getElementById('selMcpExternalTool');
+            const descEl = document.getElementById('mcpToolDescBox');
+            const paramsEl = document.getElementById('txtMcpExternalParams');
+            if (!selectEl) return;
+
+            const toolName = selectEl.value;
+            const tool = mcpDiscoveredTools.find(t => t.name === toolName);
+
+            if (descEl) {
+                descEl.innerHTML = `<strong>Description:</strong> ${escapeHtml(tool ? tool.description : 'Remote tool on external application')}`;
+            }
+
+            resetSampleParams();
+        }
+
+        function resetSampleParams() {
+            const selectEl = document.getElementById('selMcpExternalTool');
+            const paramsEl = document.getElementById('txtMcpExternalParams');
+            if (!selectEl || !paramsEl) return;
+
+            const toolName = selectEl.value;
+            if (toolName === 'get_external_app_users') {
+                paramsEl.value = JSON.stringify({ role: 'DevOps', limit: 5 }, null, 2);
+            } else if (toolName === 'fetch_billing_invoices') {
+                paramsEl.value = JSON.stringify({ status: 'PAID', currency: 'USD' }, null, 2);
+            } else if (toolName === 'query_inventory_levels') {
+                paramsEl.value = JSON.stringify({ warehouse: 'US-East-Primary' }, null, 2);
+            } else if (toolName === 'execute_external_task') {
+                paramsEl.value = JSON.stringify({ taskType: 'RUN_DIAGNOSTICS', priority: 'HIGH' }, null, 2);
+            } else if (toolName === 'post_data_to_external_store') {
+                paramsEl.value = JSON.stringify({ record: { metric: 'fleet_health', score: 98.5 }, category: 'audit' }, null, 2);
+            } else {
+                paramsEl.value = '{}';
+            }
+        }
+
+        async function askExternalDataUI() {
+            const urlInput = document.getElementById('txtMcpExternalUrl');
+            const selectEl = document.getElementById('selMcpExternalTool');
+            const paramsEl = document.getElementById('txtMcpExternalParams');
+            const viewerEl = document.getElementById('txtMcpResultViewer');
+            const latencyBadge = document.getElementById('mcpFetchLatencyBadge');
+            const visualCards = document.getElementById('mcpVisualCardsContainer');
+            const btn = document.getElementById('btnMcpExecuteFetch');
+
+            const serverUrl = urlInput ? urlInput.value.trim() : '';
+            const queryTool = selectEl ? selectEl.value : '';
+            let parameters = {};
+
+            try {
+                parameters = JSON.parse(paramsEl.value || '{}');
+            } catch (err) {
+                alert(`Invalid JSON in parameters: ${err.message}`);
+                return;
+            }
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = '⏳ Asking Remote App...';
+            }
+
+            try {
+                const res = await fetch('/api/v1/mcp/external/fetch-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ serverUrl, queryTool, parameters })
+                });
+                const json = await res.json();
+
+                if (latencyBadge) {
+                    latencyBadge.style.display = 'inline-block';
+                    latencyBadge.innerText = `${json.durationMs || 12}ms`;
+                }
+
+                if (json.success && json.data) {
+                    if (viewerEl) {
+                        viewerEl.innerText = JSON.stringify(json.data, null, 2);
+                    }
+                    renderVisualCards(queryTool, json.data);
+                } else {
+                    if (viewerEl) {
+                        viewerEl.innerText = `Error from external web app:\n${json.error ? json.error.message : 'Unknown response'}`;
+                    }
+                    if (visualCards) visualCards.style.display = 'none';
+                }
+
+                fetchMcpExchangeHistoryUI();
+            } catch (err) {
+                if (viewerEl) viewerEl.innerText = `Network/HTTP Request Error:\n${err.message}`;
+                if (visualCards) visualCards.style.display = 'none';
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = '📥 Ask & Take Data';
+                }
+            }
+        }
+
+        function renderVisualCards(toolName, data) {
+            const container = document.getElementById('mcpVisualCardsContainer');
+            if (!container || !data || typeof data !== 'object') {
+                if (container) container.style.display = 'none';
+                return;
+            }
+
+            // Case 1: Users returned
+            if (Array.isArray(data.users)) {
+                container.style.display = 'block';
+                container.innerHTML = `
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--accent-emerald); margin-bottom: 0.5rem; text-transform: uppercase;">
+                        ✅ Received ${data.users.length} User Records from Remote App (${escapeHtml(data.source || 'Directory')})
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem;">
+                        ${data.users.map(u => `
+                            <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.65rem;">
+                                <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main);">${escapeHtml(u.name || u.userId)}</div>
+                                <div style="font-size: 0.72rem; color: var(--primary); font-weight: 600;">${escapeHtml(u.role || 'Member')}</div>
+                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">${escapeHtml(u.email || '')}</div>
+                                <span class="status-pill status-PASS" style="font-size: 0.65rem; margin-top: 0.4rem; display: inline-block;">ACTIVE</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                return;
+            }
+
+            // Case 2: Invoices returned
+            if (Array.isArray(data.invoices)) {
+                container.style.display = 'block';
+                container.innerHTML = `
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--accent-cyan); margin-bottom: 0.5rem; text-transform: uppercase;">
+                        ✅ Received ${data.invoices.length} Invoices · Total: ${escapeHtml(String(data.totalValue || ''))} ${escapeHtml(data.currency || 'USD')}
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem;">
+                        ${data.invoices.map(inv => `
+                            <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.65rem;">
+                                <div style="font-weight: 700; font-size: 0.8rem; color: var(--text-main);">${escapeHtml(inv.invoiceId)}</div>
+                                <div style="font-size: 0.72rem; color: var(--text-muted);">${escapeHtml(inv.clientName)}</div>
+                                <div style="font-size: 0.95rem; font-weight: 800; color: var(--primary); margin: 3px 0;">$${escapeHtml(String(inv.amount))}</div>
+                                <span class="status-pill ${inv.status === 'PAID' ? 'status-PASS' : (inv.status === 'PENDING' ? 'status-WARN' : 'status-FAIL')}" style="font-size: 0.65rem;">${escapeHtml(inv.status)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                return;
+            }
+
+            // Case 3: Inventory returned
+            if (Array.isArray(data.inventory)) {
+                container.style.display = 'block';
+                container.innerHTML = `
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--accent-purple); margin-bottom: 0.5rem; text-transform: uppercase;">
+                        ✅ Received Warehouse Inventory (${escapeHtml(data.warehouse || 'All')})
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem;">
+                        ${data.inventory.map(item => `
+                            <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.65rem;">
+                                <div style="font-weight: 700; font-size: 0.8rem; color: var(--text-main);">${escapeHtml(item.item)}</div>
+                                <div style="font-size: 0.72rem; color: var(--text-dim); font-family: monospace;">SKU: ${escapeHtml(item.sku)}</div>
+                                <div style="font-size: 0.85rem; font-weight: 800; color: var(--accent-emerald); margin: 3px 0;">Stock: ${escapeHtml(String(item.stock))} units</div>
+                                <div style="font-size: 0.7rem; color: var(--text-muted);">Warehouse: ${escapeHtml(item.warehouse)}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                return;
+            }
+
+            container.style.display = 'none';
+        }
+
+        async function dispatchExternalTaskUI() {
+            const urlInput = document.getElementById('txtMcpExternalUrl');
+            const taskInput = document.getElementById('txtMcpTaskName');
+            const payloadInput = document.getElementById('txtMcpTaskPayload');
+            const viewerEl = document.getElementById('txtMcpResultViewer');
+
+            const serverUrl = urlInput ? urlInput.value.trim() : '';
+            const taskName = taskInput ? taskInput.value.trim() : '';
+            let taskPayload = {};
+
+            try {
+                taskPayload = JSON.parse(payloadInput.value || '{}');
+            } catch (err) {
+                alert(`Invalid JSON in task payload: ${err.message}`);
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/v1/mcp/external/dispatch-task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ serverUrl, taskName, taskPayload })
+                });
+                const json = await res.json();
+                if (viewerEl) viewerEl.innerText = JSON.stringify(json.data || json, null, 2);
+                fetchMcpExchangeHistoryUI();
+            } catch (err) {
+                if (viewerEl) viewerEl.innerText = `Dispatch Error: ${err.message}`;
+            }
+        }
+
+        function onInboundToolSelected() {
+            const selectEl = document.getElementById('selMcpInboundTool');
+            const paramsEl = document.getElementById('txtMcpInboundParams');
+            if (!selectEl || !paramsEl) return;
+
+            const tool = selectEl.value;
+            if (tool === 'get_registered_agents') {
+                paramsEl.value = JSON.stringify({ limit: 10, search: '' }, null, 2);
+            } else if (tool === 'get_agent_telemetry') {
+                paramsEl.value = JSON.stringify({ agentId: '1' }, null, 2);
+            } else if (tool === 'get_compliance_history') {
+                paramsEl.value = JSON.stringify({ limit: 5 }, null, 2);
+            } else if (tool === 'verify_agent_nine_rules') {
+                paramsEl.value = JSON.stringify({
+                    agent: {
+                        name: 'Audit Target Agent',
+                        purpose: 'Automated invoice validation and compliance review',
+                        model: 'gpt-4o',
+                        tools: ['read_invoice', 'send_alert', 'record_audit'],
+                        endpoint: 'http://localhost:4001/action'
+                    }
+                }, null, 2);
+            } else if (tool === 'trigger_agent_health_check') {
+                paramsEl.value = JSON.stringify({ endpointUrl: 'http://localhost:5000/api/v1/mcp' }, null, 2);
+            } else {
+                paramsEl.value = '{}';
+            }
+        }
+
+        async function simulateInboundMcpUI() {
+            const selectEl = document.getElementById('selMcpInboundTool');
+            const paramsEl = document.getElementById('txtMcpInboundParams');
+            const resultEl = document.getElementById('txtMcpInboundResult');
+            if (!selectEl || !resultEl) return;
+
+            const toolName = selectEl.value;
+            let args = {};
+            try {
+                args = JSON.parse(paramsEl.value || '{}');
+            } catch (err) {
+                alert(`Invalid JSON in arguments: ${err.message}`);
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/v1/mcp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-client-name': 'Watchtower-Inbound-Simulator' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: `sim_${Date.now()}`,
+                        method: 'tools/call',
+                        params: { name: toolName, arguments: args }
+                    })
+                });
+                const json = await res.json();
+                const output = (json.result && json.result.structuredResult !== undefined)
+                    ? json.result.structuredResult
+                    : (json.result || json.error);
+                resultEl.innerText = JSON.stringify(output, null, 2);
+                fetchMcpExchangeHistoryUI();
+            } catch (err) {
+                resultEl.innerText = `Simulation Error: ${err.message}`;
+            }
+        }
+
+        async function ingestExternalDataUI() {
+            const sourceInput = document.getElementById('txtMcpIngestSource');
+            const typeInput = document.getElementById('selMcpIngestType');
+            const payloadInput = document.getElementById('txtMcpIngestPayload');
+
+            const sourceApp = sourceInput ? sourceInput.value.trim() : 'External App';
+            const dataType = typeInput ? typeInput.value : 'telemetry';
+            let payload = {};
+
+            try {
+                payload = JSON.parse(payloadInput.value || '{}');
+            } catch (err) {
+                alert(`Invalid JSON in payload: ${err.message}`);
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/v1/mcp/share-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sourceApp, dataType, payload })
+                });
+                const json = await res.json();
+                if (json.success) {
+                    alert(`Success: ${json.message}`);
+                    fetchSharedRecordsListUI();
+                    fetchMcpExchangeHistoryUI();
+                } else {
+                    alert(`Ingest Failed: ${json.error ? json.error.message : 'Unknown'}`);
+                }
+            } catch (err) {
+                alert(`API Error: ${err.message}`);
+            }
+        }
+
+        async function fetchSharedRecordsListUI() {
+            const listEl = document.getElementById('mcpSharedRecordsList');
+            const countEl = document.getElementById('valMcpSharedRecordsCount');
+            if (!listEl) return;
+
+            try {
+                const res = await fetch('/api/v1/mcp/shared-data?limit=10');
+                const json = await res.json();
+                if (json.success) {
+                    if (countEl) countEl.innerText = `${json.total} Records`;
+                    if (json.data && json.data.length > 0) {
+                        listEl.innerHTML = json.data.map(r => `
+                            <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem; font-size: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong style="color: var(--text-main);">${escapeHtml(r.sourceApp)}</strong>
+                                    <span class="status-pill" style="font-size: 0.65rem; margin-left: 0.3rem;">${escapeHtml(r.dataType)}</span>
+                                </div>
+                                <div style="color: var(--text-dim); font-size: 0.7rem;">${escapeHtml(new Date(r.ingestedAt).toLocaleTimeString())}</div>
+                            </div>
+                        `).join('');
+                    } else {
+                        listEl.innerHTML = `<div style="font-size: 0.78rem; color: var(--text-muted); padding: 0.5rem; text-align: center;">No external data ingested yet.</div>`;
+                    }
+                }
+            } catch (_) {}
+        }
+
+        async function fetchMcpInboundToolsUI() {
+            const gridEl = document.getElementById('mcpInboundToolsGrid');
+            if (!gridEl) return;
+
+            try {
+                const res = await fetch('/api/v1/mcp/tools');
+                const json = await res.json();
+                if (json.success && Array.isArray(json.tools)) {
+                    gridEl.innerHTML = json.tools.map(t => `
+                        <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.5rem;">
+                            <div>
+                                <div style="font-weight: 700; font-size: 0.82rem; color: var(--primary); font-family: monospace;">${escapeHtml(t.name)}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; line-height: 1.35;">${escapeHtml(t.description || 'Standard MCP tool')}</div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.25rem;">
+                                <span class="status-pill status-PASS" style="font-size: 0.65rem;">AVAILABLE</span>
+                                <button class="btn btn-secondary btn-sm" onclick="quickTestInboundTool('${escapeHtml(t.name)}')">Try It</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (_) {}
+        }
+
+        function quickTestInboundTool(toolName) {
+            switchMcpSubTab('shareData');
+            const selectEl = document.getElementById('selMcpInboundTool');
+            if (selectEl) {
+                selectEl.value = toolName;
+                onInboundToolSelected();
+                simulateInboundMcpUI();
+            }
+        }
+
+        async function fetchMcpExchangeHistoryUI() {
+            try {
+                const res = await fetch('/api/v1/mcp/history?limit=100');
+                const json = await res.json();
+                if (json.success && Array.isArray(json.history)) {
+                    mcpCachedHistory = json.history;
+                    renderMcpHistoryTable(mcpCachedHistory);
+                    const countEl = document.getElementById('valMcpTotalExchanges');
+                    if (countEl) countEl.innerText = `${json.total} Exchanges`;
+                }
+            } catch (_) {}
+        }
+
+        function filterMcpHistory(dir) {
+            currentMcpHistoryFilter = dir;
+            if (!dir) {
+                renderMcpHistoryTable(mcpCachedHistory);
+            } else {
+                const filtered = mcpCachedHistory.filter(h => h.direction === dir);
+                renderMcpHistoryTable(filtered);
+            }
+        }
+
+        function renderMcpHistoryTable(historyList) {
+            const tableBody = document.getElementById('mcpExchangeHistoryTableBody');
+            if (!tableBody) return;
+
+            if (!historyList || historyList.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No MCP data exchanges logged yet. Click 'Ask &amp; Take Data' to see live exchanges!</td></tr>`;
+                return;
+            }
+
+            tableBody.innerHTML = historyList.map(h => {
+                const isOut = h.direction === 'OUTBOUND';
+                const dirPill = isOut
+                    ? `<span class="status-pill" style="background: rgba(16,185,129,0.12); color: #047857; font-weight: 700;">➡️ OUTBOUND (ASK/TAKE)</span>`
+                    : `<span class="status-pill" style="background: rgba(99,102,241,0.12); color: var(--primary); font-weight: 700;">⬅️ INBOUND (SHARED)</span>`;
+
+                const timeStr = new Date(h.timestamp).toLocaleTimeString();
+                return `
+                    <tr style="border-bottom: 1px solid var(--border-subtle);">
+                        <td style="padding: 0.6rem 0.5rem; font-family: monospace; color: var(--text-dim); font-size: 0.75rem;">${escapeHtml(timeStr)}</td>
+                        <td style="padding: 0.6rem 0.5rem;">${dirPill}</td>
+                        <td style="padding: 0.6rem 0.5rem; font-weight: 600; color: var(--text-main);">${escapeHtml(h.toolName || h.method)}</td>
+                        <td style="padding: 0.6rem 0.5rem; font-size: 0.75rem; color: var(--text-muted);">${escapeHtml(h.remoteAppOrUrl)}</td>
+                        <td style="padding: 0.6rem 0.5rem;"><span class="status-pill ${h.status === 'SUCCESS' ? 'status-PASS' : 'status-FAIL'}">${escapeHtml(h.status)}</span></td>
+                        <td style="padding: 0.6rem 0.5rem; font-family: monospace; color: var(--text-main);">${escapeHtml(String(h.latencyMs || 0))}ms</td>
+                        <td style="padding: 0.6rem 0.5rem; text-align: right;">
+                            <button class="btn btn-secondary btn-sm" onclick="inspectExchangePayload('${escapeHtml(h.id)}')">Inspect</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function inspectExchangePayload(id) {
+            const item = mcpCachedHistory.find(h => h.id === id);
+            if (!item) return;
+
+            showDetailModal(`MCP Exchange Details: ${item.direction} — ${item.toolName}`, {
+                id: item.id,
+                timestamp: item.timestamp,
+                direction: item.direction,
+                method: item.method,
+                toolName: item.toolName,
+                remoteAppOrUrl: item.remoteAppOrUrl,
+                status: item.status,
+                latencyMs: item.latencyMs,
+                requestPayload: item.payload,
+                response: item.response
+            });
+        }
+
+        async function clearMcpExchangeHistoryUI() {
+            if (!confirm('Clear the MCP data exchange audit log?')) return;
+            try {
+                await fetch('/api/v1/mcp/history', { method: 'DELETE' });
+                mcpCachedHistory = [];
+                renderMcpHistoryTable([]);
+                const countEl = document.getElementById('valMcpTotalExchanges');
+                if (countEl) countEl.innerText = '0 Exchanges';
+            } catch (_) {}
+        }
+
+        function copySnippet(elementId) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            navigator.clipboard.writeText(el.innerText || el.textContent).then(() => {
+                alert('Copied configuration snippet to clipboard!');
+            }).catch(() => {
+                alert('Could not copy automatically. Please select and copy text.');
+            });
+        }
+
+        function copyMcpResult() {
+            const el = document.getElementById('txtMcpResultViewer');
+            if (!el) return;
+            navigator.clipboard.writeText(el.innerText || el.textContent).then(() => {
+                alert('Copied data payload to clipboard!');
+            }).catch(() => {
+                alert('Could not copy automatically.');
+            });
         }
 
     </script>

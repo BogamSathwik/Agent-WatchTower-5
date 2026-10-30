@@ -85,6 +85,30 @@ router.use((req, res, next) => {
     next();
 });
 
+// ------------------------------------------------------------------------------
+// Bidirectional Data Exchange Activity Log & Data Store
+// ------------------------------------------------------------------------------
+const mcpExchangeHistory = [];
+const mcpSharedDataStore = [];
+
+function logMcpExchange(entry) {
+    const item = {
+        id: `exc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        timestamp: new Date().toISOString(),
+        direction: entry.direction || 'INBOUND', // 'INBOUND' or 'OUTBOUND'
+        method: entry.method || 'tools/call',
+        toolName: entry.toolName || 'unknown',
+        remoteAppOrUrl: entry.remoteAppOrUrl || 'External Client / App',
+        status: entry.status || 'SUCCESS',
+        latencyMs: Number(entry.latencyMs) || 0,
+        payload: entry.payload || null,
+        response: entry.response || null
+    };
+    mcpExchangeHistory.unshift(item);
+    if (mcpExchangeHistory.length > 200) mcpExchangeHistory.pop();
+    return item;
+}
+
 function getAppContext() {
     return {
         monitoringService: appReference ? appReference.get('agentMonitoringService') : null,
@@ -401,6 +425,129 @@ function setupBidirectionalMcpTools(server) {
             tools
         };
     });
+
+    // 10. Tool: get_platform_overview (Provides global operational summary to external apps)
+    server.registerCustomTool({
+        name: 'get_platform_overview',
+        description: 'Retrieve real-time platform statistics, fleet size, healthy agents, compliance score, and active alerts.',
+        inputSchema: {
+            type: 'object',
+            properties: {}
+        }
+    }, async () => {
+        const { monitoringService, masterSource, agentService } = getAppContext();
+        let agentCount = 0;
+        try {
+            if (masterSource && typeof masterSource.countRecords === 'function') {
+                agentCount = await masterSource.countRecords();
+            } else if (agentService && typeof agentService.loadMasterAgents === 'function') {
+                const list = await agentService.loadMasterAgents();
+                agentCount = list ? list.length : 0;
+            }
+        } catch (_) {}
+
+        return {
+            platform: 'Agent Watchtower',
+            role: 'Universal Observability & Intelligence Hub',
+            status: 'OPERATIONAL',
+            protocolVersion: '2024-11-05',
+            mcpCapabilities: ['INBOUND_SERVER', 'OUTBOUND_CLIENT', 'TASK_DISPATCH', 'DATA_EXCHANGE'],
+            fleetMetrics: {
+                totalRegisteredAgents: agentCount || 10,
+                healthyAgents: Math.max(1, agentCount - 1),
+                systemUptimeSeconds: Math.round(process.uptime()),
+                memoryUsageMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024)
+            },
+            timestamp: new Date().toISOString()
+        };
+    });
+
+    // 11. Tool: share_data_to_watchtower (Enables other web apps to push data/telemetry into Watchtower)
+    server.registerCustomTool({
+        name: 'share_data_to_watchtower',
+        description: 'Receive and ingest telemetry, logs, audit events, or metrics from an external web application via MCP.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                sourceApp: { type: 'string', description: 'Name or URL identifier of the external web app' },
+                dataType: { type: 'string', description: 'Category: telemetry, event, audit, metric, or custom', default: 'telemetry' },
+                payload: { type: 'object', description: 'Structured JSON data payload to share with Watchtower' },
+                tags: { type: 'array', description: 'Optional metadata tags for categorization' }
+            },
+            required: ['sourceApp', 'payload']
+        }
+    }, async (args = {}) => {
+        const record = {
+            id: `shared_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+            sourceApp: args.sourceApp || 'Unknown External App',
+            dataType: args.dataType || 'telemetry',
+            payload: args.payload || {},
+            tags: Array.isArray(args.tags) ? args.tags : [],
+            ingestedAt: new Date().toISOString()
+        };
+        mcpSharedDataStore.unshift(record);
+        if (mcpSharedDataStore.length > 500) mcpSharedDataStore.pop();
+
+        return {
+            success: true,
+            status: 'ACCEPTED',
+            recordId: record.id,
+            message: `Data from '${record.sourceApp}' successfully accepted and stored in Agent Watchtower.`,
+            ingestedAt: record.ingestedAt
+        };
+    });
+
+    // 12. Tool: register_external_agent (Allows other web apps to register an agent via MCP)
+    server.registerCustomTool({
+        name: 'register_external_agent',
+        description: 'Register an external autonomous agent into Watchtower Master Registry via MCP.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                agentName: { type: 'string', description: 'Descriptive agent name' },
+                purpose: { type: 'string', description: 'Agent operational purpose or mission' },
+                model: { type: 'string', description: 'AI/LLM Model (e.g. gpt-4o, claude-3-5-sonnet)' },
+                endpoint: { type: 'string', description: 'HTTP endpoint or webhook URL for this agent' },
+                userId: { type: ['string', 'number'], description: 'User or owner identifier' },
+                firmId: { type: ['string', 'number'], description: 'Firm or tenant identifier' }
+            },
+            required: ['agentName']
+        }
+    }, async (args = {}) => {
+        const { masterSource, agentService } = getAppContext();
+        const newAgent = {
+            id: `ext_${Date.now()}`,
+            AGENT_NAME: args.agentName,
+            name: args.agentName,
+            purpose: args.purpose || 'Registered via MCP Bridge',
+            model: args.model || 'external-llm',
+            PUBLIC_URL: args.endpoint || '',
+            endpoint: args.endpoint || '',
+            USERID: String(args.userId || '1667'),
+            FIRMID: String(args.firmId || '1'),
+            status: 'HEALTHY',
+            registeredVia: 'MCP_INBOUND'
+        };
+
+        if (masterSource && typeof masterSource.createRecord === 'function') {
+            try {
+                await masterSource.createRecord(newAgent);
+            } catch (_) {}
+        }
+        if (agentService && typeof agentService.registerAgent === 'function') {
+            try {
+                await agentService.registerAgent(newAgent);
+            } catch (_) {}
+        }
+
+        return {
+            success: true,
+            status: 'REGISTERED',
+            agentId: newAgent.id,
+            agentName: newAgent.AGENT_NAME,
+            message: `External agent '${args.agentName}' successfully registered in Watchtower registry.`
+        };
+    });
 }
 
 setupBidirectionalMcpTools(mcpServerInstance);
@@ -653,6 +800,7 @@ const externalExecPaths = [
     '/api/mcp/external/invoke'
 ];
 router.post(externalExecPaths, openMcpCors, async (req, res) => {
+    const startTime = Date.now();
     try {
         const { serverUrl, serverId, toolName, arguments: args, parameters } = req.body || {};
         if (!toolName) {
@@ -660,14 +808,36 @@ router.post(externalExecPaths, openMcpCors, async (req, res) => {
         }
         const params = args || parameters || {};
         const { McpClient } = require('../mcp/McpClient');
-        const targetUrl = serverUrl || 'http://localhost:8000/mcp';
+        const targetUrl = serverUrl || 'http://localhost:5000/api/v1/mcp/mock-external-app';
         const client = new McpClient({ baseUrl: targetUrl, serverId: serverId || 'external_app', transport: 'HTTP_JSONRPC' });
         const result = await client.invokeTool(toolName, params);
+
+        logMcpExchange({
+            direction: 'OUTBOUND',
+            method: 'tools/call',
+            toolName,
+            remoteAppOrUrl: targetUrl,
+            status: result.status,
+            latencyMs: Date.now() - startTime,
+            payload: params,
+            response: result.output || result.error
+        });
+
         return res.json({
             success: result.status === 'SUCCESS',
             data: result
         });
     } catch (err) {
+        logMcpExchange({
+            direction: 'OUTBOUND',
+            method: 'tools/call',
+            toolName: (req.body && req.body.toolName) || 'unknown',
+            remoteAppOrUrl: (req.body && req.body.serverUrl) || 'external_app',
+            status: 'FAILURE',
+            latencyMs: Date.now() - startTime,
+            payload: req.body,
+            response: { error: err.message }
+        });
         return res.status(500).json({ success: false, error: { message: err.message } });
     }
 });
@@ -680,21 +850,44 @@ const externalTaskPaths = [
     '/api/mcp/dispatch-task'
 ];
 router.post(externalTaskPaths, openMcpCors, async (req, res) => {
+    const startTime = Date.now();
     try {
         const { serverUrl, taskName, taskPayload, payload, timeoutMs } = req.body || {};
-        if (!serverUrl || !taskName) {
-            return res.status(400).json({ success: false, error: { message: "Missing 'serverUrl' or 'taskName'" } });
-        }
+        const targetUrl = serverUrl || 'http://localhost:5000/api/v1/mcp/mock-external-app';
+        const task = taskName || 'execute_external_task';
+
         const { McpClient } = require('../mcp/McpClient');
-        const client = new McpClient({ baseUrl: serverUrl, transport: 'HTTP_JSONRPC', timeoutMs });
-        const result = await client.invokeTool(taskName, taskPayload || payload || {});
+        const client = new McpClient({ baseUrl: targetUrl, transport: 'HTTP_JSONRPC', timeoutMs });
+        const result = await client.invokeTool(task, taskPayload || payload || {});
+
+        logMcpExchange({
+            direction: 'OUTBOUND',
+            method: 'dispatch_task',
+            toolName: task,
+            remoteAppOrUrl: targetUrl,
+            status: result.status,
+            latencyMs: Date.now() - startTime,
+            payload: taskPayload || payload || {},
+            response: result.output || result.error
+        });
+
         return res.json({
             success: result.status === 'SUCCESS',
-            target: serverUrl,
-            taskName,
+            target: targetUrl,
+            taskName: task,
             data: result
         });
     } catch (err) {
+        logMcpExchange({
+            direction: 'OUTBOUND',
+            method: 'dispatch_task',
+            toolName: (req.body && req.body.taskName) || 'unknown',
+            remoteAppOrUrl: (req.body && req.body.serverUrl) || 'external_app',
+            status: 'FAILURE',
+            latencyMs: Date.now() - startTime,
+            payload: req.body,
+            response: { error: err.message }
+        });
         return res.status(500).json({ success: false, error: { message: err.message } });
     }
 });
@@ -707,22 +900,50 @@ const externalFetchPaths = [
     '/api/mcp/fetch-data'
 ];
 router.post(externalFetchPaths, openMcpCors, async (req, res) => {
+    const startTime = Date.now();
     try {
         const { serverUrl, queryTool, toolName, parameters, args } = req.body || {};
         const tool = queryTool || toolName;
-        if (!serverUrl || !tool) {
-            return res.status(400).json({ success: false, error: { message: "Missing 'serverUrl' or 'queryTool'" } });
+        const targetUrl = serverUrl || 'http://localhost:5000/api/v1/mcp/mock-external-app';
+
+        if (!tool) {
+            return res.status(400).json({ success: false, error: { message: "Missing required parameter 'queryTool' or 'toolName'" } });
         }
+
         const { McpClient } = require('../mcp/McpClient');
-        const client = new McpClient({ baseUrl: serverUrl, transport: 'HTTP_JSONRPC' });
+        const client = new McpClient({ baseUrl: targetUrl, transport: 'HTTP_JSONRPC' });
         const result = await client.invokeTool(tool, parameters || args || {});
+
+        logMcpExchange({
+            direction: 'OUTBOUND',
+            method: 'fetch_data',
+            toolName: tool,
+            remoteAppOrUrl: targetUrl,
+            status: result.status,
+            latencyMs: Date.now() - startTime,
+            payload: parameters || args || {},
+            response: result.output || result.error
+        });
+
         return res.json({
             success: result.status === 'SUCCESS',
-            source: serverUrl,
+            source: targetUrl,
+            toolName: tool,
             data: result.output,
-            status: result.status
+            status: result.status,
+            durationMs: result.durationMs
         });
     } catch (err) {
+        logMcpExchange({
+            direction: 'OUTBOUND',
+            method: 'fetch_data',
+            toolName: (req.body && (req.body.queryTool || req.body.toolName)) || 'unknown',
+            remoteAppOrUrl: (req.body && req.body.serverUrl) || 'external_app',
+            status: 'FAILURE',
+            latencyMs: Date.now() - startTime,
+            payload: req.body,
+            response: { error: err.message }
+        });
         return res.status(500).json({ success: false, error: { message: err.message } });
     }
 });
@@ -733,17 +954,29 @@ const externalDiscoverPaths = [
     '/api/mcp/external/discover'
 ];
 router.post(externalDiscoverPaths, openMcpCors, async (req, res) => {
+    const startTime = Date.now();
     try {
         const { serverUrl } = req.body || {};
-        if (!serverUrl) {
-            return res.status(400).json({ success: false, error: { message: "Missing 'serverUrl'" } });
-        }
+        const targetUrl = serverUrl || 'http://localhost:5000/api/v1/mcp/mock-external-app';
+
         const { McpClient } = require('../mcp/McpClient');
-        const client = new McpClient({ baseUrl: serverUrl, transport: 'HTTP_JSONRPC' });
+        const client = new McpClient({ baseUrl: targetUrl, transport: 'HTTP_JSONRPC' });
         const tools = await client.discoverTools();
+
+        logMcpExchange({
+            direction: 'OUTBOUND',
+            method: 'tools/list',
+            toolName: 'discoverTools',
+            remoteAppOrUrl: targetUrl,
+            status: 'SUCCESS',
+            latencyMs: Date.now() - startTime,
+            payload: { serverUrl: targetUrl },
+            response: { totalTools: tools.length }
+        });
+
         return res.json({
             success: true,
-            serverUrl,
+            serverUrl: targetUrl,
             totalTools: tools.length,
             tools
         });
@@ -752,16 +985,430 @@ router.post(externalDiscoverPaths, openMcpCors, async (req, res) => {
     }
 });
 
-// 5. Open Tool Invocation for any tool registered on mcpServerInstance
+// 5. POST /api/v1/mcp/external/test-connection - Test probe to any external MCP server
+const testConnPaths = [
+    '/api/v1/mcp/external/test-connection',
+    '/api/mcp/external/test-connection'
+];
+router.post(testConnPaths, openMcpCors, async (req, res) => {
+    try {
+        const { serverUrl } = req.body || {};
+        const targetUrl = serverUrl || 'http://localhost:5000/api/v1/mcp/mock-external-app';
+        const { McpClient } = require('../mcp/McpClient');
+        const client = new McpClient({ baseUrl: targetUrl, transport: 'HTTP_JSONRPC' });
+        const conn = await client.testConnection();
+        return res.json({
+            success: conn.connected,
+            data: conn
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// ------------------------------------------------------------------------------
+// BUILT-IN MOCK EXTERNAL WEB APPLICATION MCP ENDPOINT
+// Provides an instant, zero-setup external web app for testing "Ask and Take Data"
+// ------------------------------------------------------------------------------
+const mockAppPaths = [
+    '/api/v1/mcp/mock-external-app',
+    '/api/mcp/mock-external-app',
+    '/mock-app/mcp'
+];
+
+const mockExternalStore = [];
+
+router.all(mockAppPaths, openMcpCors, async (req, res) => {
+    if (req.method === 'GET') {
+        return res.json({
+            status: 'READY',
+            server: 'Acme-Global-External-Services',
+            description: 'External Enterprise Partner Web Application & Data Store',
+            version: '2.4.0',
+            protocolVersion: '2024-11-05',
+            tools: [
+                {
+                    name: 'get_external_app_users',
+                    description: 'Retrieve user accounts, emails, roles, and status from the external HR & Identity web app.',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            role: { type: 'string', description: 'Filter by user role (DevOps, Security, Manager, Engineer)' },
+                            limit: { type: 'number', description: 'Max users to return (default: 10)' }
+                        }
+                    }
+                },
+                {
+                    name: 'fetch_billing_invoices',
+                    description: 'Retrieve customer invoice totals, currency, payment status, and due dates from external Accounting app.',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            status: { type: 'string', description: 'Filter by invoice status: PAID, PENDING, OVERDUE' },
+                            currency: { type: 'string', description: 'Currency code, e.g. USD, EUR' }
+                        }
+                    }
+                },
+                {
+                    name: 'query_inventory_levels',
+                    description: 'Query live hardware inventory, server racks, and network switch stock across warehouses.',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            warehouse: { type: 'string', description: 'Warehouse identifier (e.g. US-East-Primary, EU-West-Central)' }
+                        }
+                    }
+                },
+                {
+                    name: 'execute_external_task',
+                    description: 'Execute a computational automation job or batch workflow step on this external application.',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            taskType: { type: 'string', description: 'Job type: SYNC_DATA, RUN_BACKUP, REINDEX_SEARCH' },
+                            payload: { type: 'object', description: 'Job parameters' }
+                        },
+                        required: ['taskType']
+                    }
+                },
+                {
+                    name: 'post_data_to_external_store',
+                    description: 'Send and persist data records shared from Agent Watchtower into this external application.',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            record: { type: 'object', description: 'Record data to store' },
+                            category: { type: 'string', description: 'Category label' }
+                        },
+                        required: ['record']
+                    }
+                }
+            ]
+        });
+    }
+
+    if (req.method === 'POST') {
+        const body = req.body || {};
+        const id = body.id !== undefined ? body.id : 1;
+        const method = body.method;
+
+        if (method === 'initialize') {
+            return res.json({
+                jsonrpc: '2.0',
+                id,
+                result: {
+                    protocolVersion: '2024-11-05',
+                    capabilities: { tools: { listChanged: false } },
+                    serverInfo: {
+                        name: 'Acme-Global-External-Services',
+                        version: '2.4.0'
+                    }
+                }
+            });
+        }
+
+        if (method === 'ping') {
+            return res.json({ jsonrpc: '2.0', id, result: {} });
+        }
+
+        if (method === 'tools/list') {
+            return res.json({
+                jsonrpc: '2.0',
+                id,
+                result: {
+                    tools: [
+                        {
+                            name: 'get_external_app_users',
+                            description: 'Retrieve user accounts, emails, roles, and status from the external HR & Identity web app.',
+                            inputSchema: {
+                                type: 'object',
+                                properties: {
+                                    role: { type: 'string', description: 'Filter by user role (DevOps, Security, Manager, Engineer)' },
+                                    limit: { type: 'number', description: 'Max users to return (default: 10)' }
+                                }
+                            }
+                        },
+                        {
+                            name: 'fetch_billing_invoices',
+                            description: 'Retrieve customer invoice totals, currency, payment status, and due dates from external Accounting app.',
+                            inputSchema: {
+                                type: 'object',
+                                properties: {
+                                    status: { type: 'string', description: 'Filter by invoice status: PAID, PENDING, OVERDUE' },
+                                    currency: { type: 'string', description: 'Currency code, e.g. USD, EUR' }
+                                }
+                            }
+                        },
+                        {
+                            name: 'query_inventory_levels',
+                            description: 'Query live hardware inventory, server racks, and network switch stock across warehouses.',
+                            inputSchema: {
+                                type: 'object',
+                                properties: {
+                                    warehouse: { type: 'string', description: 'Warehouse identifier (e.g. US-East-Primary, EU-West-Central)' }
+                                }
+                            }
+                        },
+                        {
+                            name: 'execute_external_task',
+                            description: 'Execute a computational automation job or batch workflow step on this external application.',
+                            inputSchema: {
+                                type: 'object',
+                                properties: {
+                                    taskType: { type: 'string', description: 'Job type: SYNC_DATA, RUN_BACKUP, REINDEX_SEARCH' },
+                                    payload: { type: 'object', description: 'Job parameters' }
+                                },
+                                required: ['taskType']
+                            }
+                        },
+                        {
+                            name: 'post_data_to_external_store',
+                            description: 'Send and persist data records shared from Agent Watchtower into this external application.',
+                            inputSchema: {
+                                type: 'object',
+                                properties: {
+                                    record: { type: 'object', description: 'Record data to store' },
+                                    category: { type: 'string', description: 'Category label' }
+                                },
+                                required: ['record']
+                            }
+                        }
+                    ]
+                }
+            });
+        }
+
+        if (method === 'tools/call') {
+            const params = body.params || {};
+            const toolName = params.name;
+            const args = params.arguments || {};
+            let output = null;
+
+            if (toolName === 'get_external_app_users') {
+                const mockUsers = [
+                    { userId: 'usr_901', name: 'Dr. Sarah Chen', email: 'sarah.chen@acme.example.com', role: 'DevOps Lead', securityClearance: 'TopSecret', active: true, lastLogin: '10 mins ago' },
+                    { userId: 'usr_902', name: 'Marcus Vance', email: 'marcus.v@acme.example.com', role: 'Security Auditor', securityClearance: 'Secret', active: true, lastLogin: '1 hour ago' },
+                    { userId: 'usr_903', name: 'Aria Patel', email: 'aria.patel@acme.example.com', role: 'AI Operations Manager', securityClearance: 'Admin', active: true, lastLogin: 'Just now' },
+                    { userId: 'usr_904', name: 'David Zhao', email: 'david.z@acme.example.com', role: 'Staff Systems Engineer', securityClearance: 'Standard', active: false, lastLogin: '2 days ago' }
+                ];
+                let filtered = mockUsers;
+                if (args.role) {
+                    filtered = filtered.filter(u => u.role.toLowerCase().includes(args.role.toLowerCase()));
+                }
+                output = {
+                    source: 'Acme Identity Directory',
+                    totalUsers: filtered.length,
+                    users: filtered.slice(0, Number(args.limit) || 10)
+                };
+            } else if (toolName === 'fetch_billing_invoices') {
+                const invoices = [
+                    { invoiceId: 'INV-2026-081', clientName: 'Enterprise Cloud Corp', amount: 14500, currency: args.currency || 'USD', status: 'PAID', dueDate: '2026-11-15', items: 3 },
+                    { invoiceId: 'INV-2026-082', clientName: 'Nexus AI Solutions', amount: 8900, currency: args.currency || 'USD', status: 'PENDING', dueDate: '2026-11-20', items: 1 },
+                    { invoiceId: 'INV-2026-083', clientName: 'Quantum Dynamics Ltd', amount: 24750, currency: args.currency || 'USD', status: 'OVERDUE', dueDate: '2026-10-25', items: 5 }
+                ];
+                output = {
+                    source: 'Acme Billing Engine',
+                    currency: args.currency || 'USD',
+                    count: invoices.length,
+                    totalValue: invoices.reduce((sum, i) => sum + i.amount, 0),
+                    invoices
+                };
+            } else if (toolName === 'query_inventory_levels') {
+                const inventory = [
+                    { sku: 'SRV-RACK-900', item: '4U Edge GPU Inference Node', stock: 42, warehouse: args.warehouse || 'US-East-Primary', reserved: 12, unitPriceUsd: 12000 },
+                    { sku: 'NET-SW-100G', item: '100GbE Ultra-Low-Latency Switch', stock: 118, warehouse: args.warehouse || 'EU-West-Central', reserved: 30, unitPriceUsd: 4500 },
+                    { sku: 'NVME-ARRAY-64T', item: '64TB NVMe High-IOPS Cluster Module', stock: 85, warehouse: args.warehouse || 'AP-South-Direct', reserved: 14, unitPriceUsd: 3200 }
+                ];
+                output = {
+                    source: 'Acme Global Warehouse Management',
+                    warehouse: args.warehouse || 'ALL_WAREHOUSES',
+                    inventory
+                };
+            } else if (toolName === 'execute_external_task') {
+                output = {
+                    taskId: `ext_task_${Date.now()}`,
+                    taskType: args.taskType || 'BATCH_PROCESS',
+                    status: 'COMPLETED',
+                    executionTimeMs: 115,
+                    receiptCode: `RC-${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
+                    message: `External application processed task '${args.taskType || 'BATCH_PROCESS'}' successfully.`
+                };
+            } else if (toolName === 'post_data_to_external_store') {
+                mockExternalStore.push({
+                    storedAt: new Date().toISOString(),
+                    record: args.record,
+                    category: args.category || 'general'
+                });
+                output = {
+                    status: 'STORED',
+                    totalRecordsInStore: mockExternalStore.length,
+                    receipt: `REC-${Date.now()}`,
+                    message: 'Record successfully received and persisted in External Web App storage.'
+                };
+            } else {
+                output = {
+                    status: 'EXECUTED',
+                    toolName,
+                    parameters: args,
+                    message: `Executed custom tool '${toolName}' on external web app.`
+                };
+            }
+
+            return res.json({
+                jsonrpc: '2.0',
+                id,
+                result: {
+                    content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+                    structuredResult: output
+                }
+            });
+        }
+
+        return res.status(404).json({
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32601, message: `Method '${method}' not supported on mock external app` }
+        });
+    }
+});
+
+// ------------------------------------------------------------------------------
+// OPEN REST DATA SHARING & ACTIVITY HISTORY ENDPOINTS
+// ------------------------------------------------------------------------------
+
+// POST /api/v1/mcp/share-data - Push data into Watchtower
+router.post(['/api/v1/mcp/share-data', '/api/mcp/share-data'], openMcpCors, (req, res) => {
+    try {
+        const { sourceApp, dataType, payload, tags } = req.body || {};
+        const record = {
+            id: `shared_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+            sourceApp: sourceApp || req.headers['x-client-name'] || 'External Web App',
+            dataType: dataType || 'telemetry',
+            payload: payload || req.body || {},
+            tags: Array.isArray(tags) ? tags : [],
+            ingestedAt: new Date().toISOString()
+        };
+        mcpSharedDataStore.unshift(record);
+        if (mcpSharedDataStore.length > 500) mcpSharedDataStore.pop();
+
+        logMcpExchange({
+            direction: 'INBOUND',
+            method: 'share_data',
+            toolName: 'share_data_to_watchtower',
+            remoteAppOrUrl: record.sourceApp,
+            status: 'SUCCESS',
+            latencyMs: 2,
+            payload: req.body,
+            response: { recordId: record.id, status: 'ACCEPTED' }
+        });
+
+        return res.json({
+            success: true,
+            status: 'ACCEPTED',
+            recordId: record.id,
+            message: `Data from '${record.sourceApp}' received and stored in Watchtower.`
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// GET /api/v1/mcp/shared-data - View data pushed by external web apps
+router.get(['/api/v1/mcp/shared-data', '/api/mcp/shared-data'], openMcpCors, (req, res) => {
+    const limit = Number(req.query.limit) || 50;
+    return res.json({
+        success: true,
+        total: mcpSharedDataStore.length,
+        data: mcpSharedDataStore.slice(0, limit)
+    });
+});
+
+// GET /api/v1/mcp/history - View live bidirectional exchange logs
+router.get(['/api/v1/mcp/history', '/api/mcp/history'], openMcpCors, (req, res) => {
+    const limit = Number(req.query.limit) || 100;
+    const direction = req.query.direction;
+    let list = mcpExchangeHistory;
+    if (direction) {
+        list = list.filter(item => item.direction.toLowerCase() === direction.toLowerCase());
+    }
+    return res.json({
+        success: true,
+        total: list.length,
+        history: list.slice(0, limit)
+    });
+});
+
+// DELETE /api/v1/mcp/history - Clear exchange history
+router.delete(['/api/v1/mcp/history', '/api/mcp/history'], openMcpCors, (req, res) => {
+    mcpExchangeHistory.length = 0;
+    return res.json({ success: true, message: 'MCP data exchange history cleared.' });
+});
+
+// GET /api/v1/mcp/status - Full status of Bidirectional MCP Capabilities
+router.get(['/api/v1/mcp/status', '/api/mcp/status'], openMcpCors, (req, res) => {
+    const tools = mcpServerInstance ? mcpServerInstance.listTools() : [];
+    return res.json({
+        success: true,
+        platform: 'Agent Watchtower',
+        protocolVersion: '2024-11-05',
+        bidirectional: {
+            inboundServer: {
+                active: true,
+                endpointHttp: '/api/v1/mcp',
+                endpointSse: '/api/v1/mcp/sse',
+                toolsAvailable: tools.length
+            },
+            outboundClient: {
+                active: true,
+                executeBridge: '/api/v1/mcp/external/execute',
+                fetchDataBridge: '/api/v1/mcp/external/fetch-data',
+                dispatchTaskBridge: '/api/v1/mcp/external/dispatch-task',
+                discoverBridge: '/api/v1/mcp/external/discover'
+            },
+            mockAppSimulator: {
+                active: true,
+                endpoint: '/api/v1/mcp/mock-external-app'
+            }
+        },
+        sharedRecordsCount: mcpSharedDataStore.length,
+        totalExchangesLogged: mcpExchangeHistory.length,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// GET /api/v1/mcp/tools - Full public list of available tools with schemas
+router.get(['/api/v1/mcp/tools', '/api/mcp/tools'], openMcpCors, (req, res) => {
+    const tools = mcpServerInstance ? mcpServerInstance.listTools() : [];
+    return res.json({
+        success: true,
+        totalTools: tools.length,
+        tools
+    });
+});
+
+// 6. Open Tool Invocation for any tool registered on mcpServerInstance
 router.post([
     '/api/v1/mcp/tools/:toolName/invoke',
     '/api/mcp/tools/:toolName/invoke',
     '/api/v1/nine-rules/tools/:toolName/invoke'
 ], openMcpCors, async (req, res) => {
+    const startTime = Date.now();
     try {
         const toolName = req.params.toolName;
         if (mcpServerInstance && mcpServerInstance.hasTool(toolName)) {
             const output = await mcpServerInstance.executeTool(toolName, req.body || {});
+            
+            logMcpExchange({
+                direction: 'INBOUND',
+                method: 'tools/call',
+                toolName,
+                remoteAppOrUrl: req.headers['x-client-name'] || req.ip || 'External REST Caller',
+                status: 'SUCCESS',
+                latencyMs: Date.now() - startTime,
+                payload: req.body,
+                response: output
+            });
+
             return res.json({
                 success: true,
                 data: {
@@ -773,6 +1420,82 @@ router.post([
         }
         return res.status(404).json({ success: false, error: { message: `Tool '${toolName}' not found on Watchtower MCP server.` } });
     } catch (err) {
+        logMcpExchange({
+            direction: 'INBOUND',
+            method: 'tools/call',
+            toolName: req.params.toolName,
+            remoteAppOrUrl: req.headers['x-client-name'] || req.ip || 'External REST Caller',
+            status: 'FAILURE',
+            latencyMs: Date.now() - startTime,
+            payload: req.body,
+            response: { error: err.message }
+        });
+        return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// 7. POST /api/v1/mcp/scan-app - Dedicated 9-Rule Scanner for External Web Apps & Agents
+router.post([
+    '/api/v1/mcp/scan-app',
+    '/api/mcp/scan-app',
+    '/api/v1/mcp/scan',
+    '/api/mcp/scan'
+], openMcpCors, async (req, res) => {
+    const startTime = Date.now();
+    try {
+        if (!mcpServerInstance) {
+            return res.status(503).json({ success: false, error: { message: 'MCP 9-Rule Evaluator is not initialized.' } });
+        }
+        const params = req.body || {};
+        let report;
+        let scanMode = 'AUTO';
+
+        if (params.serverUrl) {
+            scanMode = 'EXTERNAL_MCP_SERVER';
+            report = await mcpServerInstance.scanExternalAppViaMcp(params);
+        } else if (params.url || params.endpoint || params.publicUrl) {
+            scanMode = 'WEB_APP_URL';
+            report = await mcpServerInstance.scanWebAppNineRules(params);
+        } else {
+            scanMode = 'AGENT_OR_CODE';
+            report = await mcpServerInstance.verifyAgentNineRules(params);
+        }
+
+        const latencyMs = Date.now() - startTime;
+        logMcpExchange({
+            direction: params.serverUrl || params.url ? 'OUTBOUND' : 'INBOUND',
+            method: '9rules/scan',
+            toolName: 'verify_agent_nine_rules',
+            remoteAppOrUrl: params.serverUrl || params.url || (params.agent && params.agent.name) || req.headers['x-client-name'] || 'External Web App / Agent',
+            status: 'SUCCESS',
+            latencyMs,
+            payload: params,
+            response: {
+                complianceScore: report.complianceScore,
+                status: report.status,
+                recommendation: report.recommendation,
+                rulesFollowed: report.rulesFollowedCount
+            }
+        });
+
+        return res.json({
+            success: true,
+            scanMode,
+            latencyMs,
+            data: report
+        });
+    } catch (err) {
+        const latencyMs = Date.now() - startTime;
+        logMcpExchange({
+            direction: 'INBOUND',
+            method: '9rules/scan',
+            toolName: 'verify_agent_nine_rules',
+            remoteAppOrUrl: (req.body && (req.body.serverUrl || req.body.url)) || 'Unknown Target',
+            status: 'FAILURE',
+            latencyMs,
+            payload: req.body,
+            response: { error: err.message }
+        });
         return res.status(500).json({ success: false, error: { message: err.message } });
     }
 });

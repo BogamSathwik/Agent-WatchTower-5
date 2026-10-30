@@ -26,10 +26,63 @@ class McpClient {
     constructor(serverProfile = {}) {
         this.serverId = serverProfile.serverId || serverProfile.id || 'mcp_server';
         this.name = serverProfile.name || this.serverId;
-        this.baseUrl = serverProfile.baseUrl || 'http://localhost:4001';
+        
+        let url = serverProfile.baseUrl || 'http://localhost:4001';
+        if (typeof url === 'string') {
+            url = url.trim();
+            if (url.startsWith('/')) {
+                const port = process.env.PORT || 3000;
+                url = `http://localhost:${port}${url}`;
+            } else if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                url = `http://${url}`;
+            }
+        }
+        this.baseUrl = url;
         this.transport = serverProfile.transport || 'HTTP_JSONRPC';
         this.status = serverProfile.status || 'CONNECTED';
         this.timeoutMs = Number(serverProfile.timeoutMs) || 20000;
+    }
+
+    /**
+     * Tests connectivity to the external application MCP endpoint
+     */
+    async testConnection() {
+        const startTime = Date.now();
+        try {
+            const initResult = await this._sendHttpJsonRpc('initialize', {
+                protocolVersion: '2024-11-05',
+                capabilities: {},
+                clientInfo: { name: 'agent-watchtower-mcp-client', version: '1.0.0' }
+            }, 6000);
+            return {
+                connected: true,
+                status: 'CONNECTED',
+                serverUrl: this.baseUrl,
+                latencyMs: Date.now() - startTime,
+                serverInfo: (initResult && initResult.serverInfo) || { name: this.name },
+                protocolVersion: (initResult && initResult.protocolVersion) || '2024-11-05'
+            };
+        } catch (err) {
+            // Fallback: test tools/list
+            try {
+                const toolsRes = await this._sendHttpJsonRpc('tools/list', {}, 6000);
+                return {
+                    connected: true,
+                    status: 'CONNECTED',
+                    serverUrl: this.baseUrl,
+                    latencyMs: Date.now() - startTime,
+                    toolsCount: toolsRes && Array.isArray(toolsRes.tools) ? toolsRes.tools.length : 0
+                };
+            } catch (err2) {
+                return {
+                    connected: false,
+                    status: 'UNREACHABLE',
+                    serverUrl: this.baseUrl,
+                    error: err.message,
+                    latencyMs: Date.now() - startTime
+                };
+            }
+        }
     }
 
     /**
@@ -83,13 +136,14 @@ class McpClient {
                     return result.tools.map(t => ({
                         name: t.name,
                         description: t.description || '',
-                        inputSchema: t.inputSchema || {},
+                        inputSchema: t.inputSchema || { type: 'object' },
                         allowedRoles: ['admin', 'operator', 'viewer', 'public'],
                         enabled: true
                     }));
                 }
             } catch (err) {
                 console.warn(`[McpClient] Remote tool discovery from ${this.baseUrl} failed (${err.message}). Using local profile.`);
+                throw new Error(`Failed to discover tools from external web app at ${this.baseUrl}: ${err.message}`);
             }
         }
 
