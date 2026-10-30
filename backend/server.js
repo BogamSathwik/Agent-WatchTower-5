@@ -55332,6 +55332,215 @@ router.post([
     }
 });
 
+// ------------------------------------------------------------------------------
+// OPEN MCP ENDPOINT REGISTRY & MANAGEMENT (No auth blockers, user-managed endpoints)
+// ------------------------------------------------------------------------------
+const registeredMcpEndpoints = [
+    {
+        id: 'ep_acme_mock',
+        name: 'Acme Enterprise Partner Services',
+        url: 'http://localhost:5000/api/v1/mcp/mock-external-app',
+        description: 'Mock external enterprise partner web app exposing users, billing invoices, inventory stock, and automated task processing.',
+        category: 'Mock Partner App',
+        status: 'CONNECTED',
+        latencyMs: 12,
+        toolsCount: 5,
+        authType: 'NONE',
+        headers: {},
+        isDefault: true,
+        addedAt: new Date().toISOString()
+    },
+    {
+        id: 'ep_watchtower_gateway',
+        name: 'Watchtower Fleet Core MCP Gateway',
+        url: 'http://localhost:5000/api/v1/mcp',
+        description: 'Central Model Context Protocol server exposing fleet registry, live agent telemetry, quality compliance, and 9-rule audits.',
+        category: 'Core Watchtower',
+        status: 'CONNECTED',
+        latencyMs: 4,
+        toolsCount: 13,
+        authType: 'NONE',
+        headers: {},
+        isDefault: true,
+        addedAt: new Date().toISOString()
+    },
+    {
+        id: 'ep_remote_worker',
+        name: 'Autonomous Agent Worker Cluster',
+        url: 'http://localhost:4001/mcp',
+        description: 'Distributed AI agent worker node executing long-running computational batch workflows and telemetry polling.',
+        category: 'External Agent Worker',
+        status: 'UNTESTED',
+        latencyMs: 0,
+        toolsCount: 0,
+        authType: 'NONE',
+        headers: {},
+        isDefault: true,
+        addedAt: new Date().toISOString()
+    }
+];
+
+// GET /api/v1/mcp/endpoints - List all user-configured & system MCP endpoints
+router.get(['/api/v1/mcp/endpoints', '/api/mcp/endpoints'], openMcpCors, (req, res) => {
+    return res.json({
+        success: true,
+        total: registeredMcpEndpoints.length,
+        endpoints: registeredMcpEndpoints
+    });
+});
+
+// POST /api/v1/mcp/endpoints - Add a new MCP endpoint from the frontend interface
+router.post(['/api/v1/mcp/endpoints', '/api/mcp/endpoints'], openMcpCors, async (req, res) => {
+    try {
+        const { name, url, description, category, authType, apiKey, headers } = req.body || {};
+        if (!url || typeof url !== 'string' || !url.trim()) {
+            return res.status(400).json({ success: false, error: { message: "Endpoint 'url' is required." } });
+        }
+        let cleanUrl = url.trim();
+        if (!/^https?:\/\//i.test(cleanUrl) && !cleanUrl.startsWith('/')) {
+            cleanUrl = 'http://' + cleanUrl;
+        }
+
+        const endpointName = (name && String(name).trim()) || `MCP Server (${cleanUrl})`;
+        const newId = `ep_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+
+        const newEndpoint = {
+            id: newId,
+            name: endpointName,
+            url: cleanUrl,
+            description: description ? String(description).trim() : `External MCP server at ${cleanUrl}`,
+            category: category ? String(category).trim() : 'External Service',
+            status: 'UNTESTED',
+            latencyMs: 0,
+            toolsCount: 0,
+            authType: authType || 'NONE',
+            headers: headers || (apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}),
+            isDefault: false,
+            addedAt: new Date().toISOString()
+        };
+
+        // Attempt initial connection test
+        try {
+            const { McpClient } = require('../mcp/McpClient');
+            const client = new McpClient({ baseUrl: cleanUrl, transport: 'HTTP_JSONRPC', timeoutMs: 4000 });
+            const conn = await client.testConnection();
+            if (conn && conn.connected) {
+                newEndpoint.status = 'CONNECTED';
+                newEndpoint.latencyMs = conn.latencyMs || 0;
+                try {
+                    const tools = await client.discoverTools();
+                    newEndpoint.toolsCount = Array.isArray(tools) ? tools.length : 0;
+                } catch (_) {}
+            } else {
+                newEndpoint.status = 'UNREACHABLE';
+            }
+        } catch (_) {
+            newEndpoint.status = 'UNREACHABLE';
+        }
+
+        registeredMcpEndpoints.unshift(newEndpoint);
+
+        logMcpExchange({
+            direction: 'INBOUND',
+            method: 'endpoint/register',
+            toolName: 'register_mcp_endpoint',
+            remoteAppOrUrl: cleanUrl,
+            status: 'SUCCESS',
+            latencyMs: newEndpoint.latencyMs,
+            payload: { name: endpointName, url: cleanUrl },
+            response: { id: newId, status: newEndpoint.status }
+        });
+
+        return res.status(201).json({
+            success: true,
+            endpoint: newEndpoint,
+            message: `MCP Endpoint '${endpointName}' successfully added.`
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// PUT /api/v1/mcp/endpoints/:id - Update an existing MCP endpoint
+router.put(['/api/v1/mcp/endpoints/:id', '/api/mcp/endpoints/:id'], openMcpCors, (req, res) => {
+    try {
+        const id = req.params.id;
+        const index = registeredMcpEndpoints.findIndex(e => e.id === id);
+        if (index === -1) {
+            return res.status(404).json({ success: false, error: { message: `MCP Endpoint '${id}' not found.` } });
+        }
+        const updates = req.body || {};
+        if (updates.name) registeredMcpEndpoints[index].name = updates.name.trim();
+        if (updates.url) registeredMcpEndpoints[index].url = updates.url.trim();
+        if (updates.description !== undefined) registeredMcpEndpoints[index].description = updates.description.trim();
+        if (updates.category) registeredMcpEndpoints[index].category = updates.category.trim();
+        if (updates.headers) registeredMcpEndpoints[index].headers = updates.headers;
+        registeredMcpEndpoints[index].updatedAt = new Date().toISOString();
+
+        return res.json({
+            success: true,
+            endpoint: registeredMcpEndpoints[index],
+            message: `MCP Endpoint '${registeredMcpEndpoints[index].name}' updated.`
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// DELETE /api/v1/mcp/endpoints/:id - Delete an endpoint
+router.delete(['/api/v1/mcp/endpoints/:id', '/api/mcp/endpoints/:id'], openMcpCors, (req, res) => {
+    try {
+        const id = req.params.id;
+        const index = registeredMcpEndpoints.findIndex(e => e.id === id);
+        if (index === -1) {
+            return res.status(404).json({ success: false, error: { message: `MCP Endpoint '${id}' not found.` } });
+        }
+        const removed = registeredMcpEndpoints.splice(index, 1)[0];
+        return res.json({
+            success: true,
+            message: `MCP Endpoint '${removed.name}' removed from registry.`
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
+// POST /api/v1/mcp/endpoints/:id/probe - Test probe connectivity & discover tools for a specific endpoint
+router.post(['/api/v1/mcp/endpoints/:id/probe', '/api/mcp/endpoints/:id/probe'], openMcpCors, async (req, res) => {
+    try {
+        const id = req.params.id;
+        const ep = registeredMcpEndpoints.find(e => e.id === id);
+        if (!ep) {
+            return res.status(404).json({ success: false, error: { message: `MCP Endpoint '${id}' not found.` } });
+        }
+        const { McpClient } = require('../mcp/McpClient');
+        const client = new McpClient({ baseUrl: ep.url, transport: 'HTTP_JSONRPC', timeoutMs: 6000 });
+        const conn = await client.testConnection();
+        let tools = [];
+        if (conn && conn.connected) {
+            ep.status = 'CONNECTED';
+            ep.latencyMs = conn.latencyMs || 0;
+            try {
+                tools = await client.discoverTools();
+                ep.toolsCount = Array.isArray(tools) ? tools.length : 0;
+            } catch (_) {}
+        } else {
+            ep.status = 'UNREACHABLE';
+            ep.latencyMs = conn.latencyMs || 0;
+        }
+        ep.lastProbedAt = new Date().toISOString();
+
+        return res.json({
+            success: conn && conn.connected,
+            endpoint: ep,
+            probe: conn,
+            tools
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+});
+
 // ==============================================================================
 // AUTHENTICATED PLATFORM MCP MANAGEMENT ROUTES
 // ==============================================================================

@@ -3804,11 +3804,23 @@
                             <span class="status-pill" style="background: rgba(99,102,241,0.12); color: var(--primary); font-weight: 700;">BIDIRECTIONAL 2-WAY</span>
                             <button class="btn btn-secondary btn-sm" onclick="fetchMcpOverviewUI()">🔄 Refresh Hub</button>
                             <button class="btn btn-primary btn-sm" onclick="switchMcpSubTab('askData')">⚡ Ask &amp; Take Data</button>
+                            <button class="btn btn-secondary btn-sm" onclick="openAddMcpEndpointModal()" style="display: flex; align-items: center; gap: 0.35rem; font-weight: 700; color: var(--accent-cyan); border-color: rgba(2, 132, 199, 0.4);">
+                                <span>➕</span> Add MCP Endpoint
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Top 4 Symmetrical Overview Cards -->
-                    <div class="overview-grid" style="margin-bottom: 1.5rem;">
+                    <!-- Top 5 Symmetrical Overview Cards -->
+                    <div class="overview-grid" style="margin-bottom: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));">
+                        <div class="metric-card" onclick="switchMcpSubTab('endpoints')" style="cursor: pointer;" title="Click to view and manage registered MCP endpoints">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div class="metric-label" style="color: var(--accent-cyan);">Managed Endpoints</div>
+                                <span class="status-pill status-PASS" id="pillMcpEndpointsTotal" style="font-size: 0.65rem; padding: 2px 7px;">3 SAVED</span>
+                            </div>
+                            <div class="metric-value" id="valMcpManagedEndpointsCount" style="color: var(--accent-cyan);">3 Endpoints</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">Add, Probe &amp; Manage Custom MCPs</div>
+                        </div>
+
                         <div class="metric-card" onclick="switchMcpSubTab('shareData')" style="cursor: pointer;" title="Click to view inbound server tools and endpoints">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div class="metric-label">Inbound MCP Server</div>
@@ -3829,10 +3841,10 @@
 
                         <div class="metric-card" onclick="switchMcpSubTab('shareData')" style="cursor: pointer;" title="Click to view ingested external data">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div class="metric-label" style="color: var(--accent-cyan);">Shared Ingest Store</div>
-                                <span class="status-pill" style="background: rgba(2,132,199,0.12); color: var(--accent-cyan); font-size: 0.65rem; padding: 2px 7px;">PERSISTENT</span>
+                                <div class="metric-label" style="color: var(--accent-amber);">Shared Ingest Store</div>
+                                <span class="status-pill" style="background: rgba(217,119,6,0.12); color: var(--accent-amber); font-size: 0.65rem; padding: 2px 7px;">PERSISTENT</span>
                             </div>
-                            <div class="metric-value" id="valMcpSharedRecordsCount" style="color: var(--accent-cyan);">0 Records</div>
+                            <div class="metric-value" id="valMcpSharedRecordsCount" style="color: var(--accent-amber);">0 Records</div>
                             <div style="font-size: 0.75rem; color: var(--text-muted);">Ingested from External Web Apps</div>
                         </div>
 
@@ -3848,7 +3860,10 @@
 
                     <!-- Inner Sub-Tabs Navigation -->
                     <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid var(--border-subtle); margin-bottom: 1.5rem; flex-wrap: wrap;">
-                        <button class="btn btn-sm" id="btnMcpSubTabAsk" onclick="switchMcpSubTab('askData')" style="border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: var(--bg-card); color: var(--primary); font-weight: 700; border-bottom: 2px solid var(--primary); margin-bottom: -2px;">
+                        <button class="btn btn-sm" id="btnMcpSubTabEndpoints" onclick="switchMcpSubTab('endpoints')" style="border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: var(--bg-card); color: var(--primary); font-weight: 700; border-bottom: 2px solid var(--primary); margin-bottom: -2px;">
+                            🌐 Managed MCP Endpoints (<span id="badgeMcpEndpointsCount">3</span>)
+                        </button>
+                        <button class="btn btn-sm" id="btnMcpSubTabAsk" onclick="switchMcpSubTab('askData')" style="border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: transparent; color: var(--text-muted); font-weight: 600;">
                             📥 Ask &amp; Take Data from Other Web Apps
                         </button>
                         <button class="btn btn-sm" id="btnMcpSubTabShare" onclick="switchMcpSubTab('shareData')" style="border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: transparent; color: var(--text-muted); font-weight: 600;">
@@ -3885,6 +3900,16 @@
 
                             <!-- Target Endpoint & Quick Presets -->
                             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                <!-- Saved Endpoints Quick Selector -->
+                                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; background: var(--bg-base); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+                                    <span style="font-size: 0.76rem; font-weight: 700; color: var(--primary); text-transform: uppercase;">🌐 Saved MCP Endpoints:</span>
+                                    <select id="selMcpSavedForAsk" class="btn btn-secondary btn-sm" style="flex: 1; min-width: 260px; text-align: left; background: var(--bg-card); font-size: 0.82rem;" onchange="onSavedEndpointSelectChange('ask', this.value)">
+                                        <option value="">-- Choose from your Managed MCP Endpoints --</option>
+                                    </select>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="openAddMcpEndpointModal()" style="color: var(--accent-cyan); font-weight: 700;">➕ Add New</button>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="switchMcpSubTab('endpoints')">⚙️ Manage</button>
+                                </div>
+
                                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                                     <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">Quick Presets:</span>
                                     <button class="btn btn-secondary btn-sm" onclick="setExternalMcpUrl('/api/v1/mcp/mock-external-app')">🏢 Built-in Acme Enterprise App (Mock Simulator)</button>
@@ -4304,6 +4329,16 @@ await fetch('http://localhost:5000/api/v1/mcp/share-data', {
                                     </div>
                                 </div>
 
+                                <!-- Saved Endpoints Quick Selector for 9-Rule Scan -->
+                                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; background: rgba(99,102,241,0.06); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); border: 1px solid rgba(99,102,241,0.25); margin-bottom: 0.85rem;">
+                                    <span style="font-size: 0.76rem; font-weight: 700; color: var(--primary); text-transform: uppercase;">🌐 Saved MCP Endpoints:</span>
+                                    <select id="selMcpSavedForScan" class="btn btn-secondary btn-sm" style="flex: 1; min-width: 260px; text-align: left; background: var(--bg-card); font-size: 0.82rem;" onchange="onSavedEndpointSelectChange('scan', this.value)">
+                                        <option value="">-- Choose from your Managed MCP Endpoints --</option>
+                                    </select>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="openAddMcpEndpointModal()" style="color: var(--accent-cyan); font-weight: 700;">➕ Add New</button>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="switchMcpSubTab('endpoints')">⚙️ Manage</button>
+                                </div>
+
                                 <!-- Input row -->
                                 <div id="mcpScanUrlRow" style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 0.85rem;">
                                     <div>
@@ -4415,12 +4450,120 @@ await fetch('http://localhost:5000/api/v1/mcp/share-data', {
                             </div>
                         </div>
                     </div>
+
+                    <!-- ============================================================== -->
+                    <!-- SUB-TAB 6: MANAGED MCP ENDPOINTS & REGISTRY -->
+                    <!-- ============================================================== -->
+                    <div id="mcpSubTabEndpoints" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                        <!-- Controls & Management Banner -->
+                        <div class="metric-card" style="border-left: 4px solid var(--accent-cyan);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.75rem;">
+                                <div>
+                                    <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                                        <span>🌐</span> Managed MCP Endpoints &amp; External App Registry
+                                    </h3>
+                                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">
+                                        Register external web applications, microservices, and AI agent servers exposing Model Context Protocol (MCP) endpoints. Save endpoints once to monitor latency, auto-discover tools, query data, and run 9-rule audits.
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                                    <button class="btn btn-primary btn-sm" onclick="openAddMcpEndpointModal()" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 700; background: linear-gradient(135deg, #0284c7, #0369a1); border: none; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);">
+                                        <span>➕</span> Add MCP Endpoint
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm" onclick="probeAllMcpEndpointsUI()">⚡ Probe All Latencies</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="fetchMcpEndpointsUI(true)">🔄 Refresh</button>
+                                </div>
+                            </div>
+
+                            <!-- Search & Filter Bar -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; background: var(--bg-base); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+                                <div style="position: relative; flex: 1; min-width: 240px;">
+                                    <input type="text" id="txtSearchMcpEndpoints" placeholder="🔍 Search endpoints by name, URL, or category..." oninput="filterMcpEndpointsUI()" style="width: 100%; padding: 0.45rem 0.65rem 0.45rem 2rem; font-size: 0.82rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-card); color: var(--text-main);">
+                                    <span style="position: absolute; left: 0.65rem; top: 50%; transform: translateY(-50%); font-size: 0.8rem; opacity: 0.6; pointer-events: none;">🔍</span>
+                                </div>
+                                <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+                                    <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Filter:</span>
+                                    <button class="btn btn-sm btn-primary" id="btnFilterEpAll" onclick="setEndpointCategoryFilter('ALL')">All (<span id="cntFilterAll">0</span>)</button>
+                                    <button class="btn btn-sm btn-secondary" id="btnFilterEpConnected" onclick="setEndpointCategoryFilter('CONNECTED')">Connected (<span id="cntFilterConnected">0</span>)</button>
+                                    <button class="btn btn-sm btn-secondary" id="btnFilterEpUnreachable" onclick="setEndpointCategoryFilter('UNREACHABLE')">Unreachable (<span id="cntFilterUnreachable">0</span>)</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Endpoints Card Grid -->
+                        <div id="mcpEndpointsCardGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1rem;">
+                            <!-- Populated dynamically via renderMcpEndpointsGrid() -->
+                        </div>
+                    </div>
                 </div>
 
             </main>
         </div>
     </div>
 
+    <!-- Add Managed MCP Endpoint Modal -->
+    <div id="addMcpEndpointModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card" style="max-width: 600px; border-top: 4px solid var(--accent-cyan);">
+            <div class="modal-header" style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.85rem; margin-bottom: 1rem;">
+                <div>
+                    <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                        <span>🔌</span> Add Managed MCP Endpoint
+                    </h3>
+                    <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;">
+                        Register an external web application, microservice, or agent MCP server into Watchtower.
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeAddMcpEndpointModal()">✕</button>
+            </div>
+            <form id="formAddMcpEndpoint" onsubmit="handleAddMcpEndpointSubmit(event)" style="display: flex; flex-direction: column; gap: 1rem;">
+                <div id="addMcpEndpointError" style="display: none; padding: 0.65rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #b91c1c; border-radius: var(--radius-sm); font-size: 0.8rem;"></div>
+
+                <div>
+                    <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.3rem; text-transform: uppercase;">Endpoint Name *</label>
+                    <input type="text" id="txtNewMcpName" required placeholder="e.g. Acme Billing MCP, Support Ticket Bot" style="width: 100%; padding: 0.55rem 0.75rem; font-size: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-main);">
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.3rem; text-transform: uppercase;">MCP Server URL / Endpoint *</label>
+                    <div style="display: flex; gap: 0.4rem;">
+                        <input type="text" id="txtNewMcpUrl" required placeholder="http://remote-app:8000/mcp or https://api.my-agent.com/mcp" style="flex: 1; padding: 0.55rem 0.75rem; font-size: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-main); font-family: monospace;">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="testModalEndpointConnectivity()">⚡ Test</button>
+                    </div>
+                    <div id="modalMcpProbeHint" style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.25rem;"></div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.3rem; text-transform: uppercase;">Category / System</label>
+                        <select id="selNewMcpCategory" style="width: 100%; padding: 0.55rem 0.75rem; font-size: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-main);">
+                            <option value="Web Application">🌐 Web Application</option>
+                            <option value="AI Agent Worker">🤖 AI Agent Worker</option>
+                            <option value="Microservice">⚙️ Microservice / API</option>
+                            <option value="Customer Support">🎧 Customer Support</option>
+                            <option value="Data Pipeline">📊 Data Pipeline</option>
+                            <option value="Custom Service">📦 Custom Service</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.3rem; text-transform: uppercase;">Auth Header (Optional)</label>
+                        <input type="password" id="txtNewMcpApiKey" placeholder="Bearer token or API Key" style="width: 100%; padding: 0.55rem 0.75rem; font-size: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-main);">
+                    </div>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.3rem; text-transform: uppercase;">Stated Mission / Description</label>
+                    <textarea id="txtNewMcpDescription" rows="2" placeholder="Briefly describe what capabilities this MCP endpoint exposes..." style="width: 100%; padding: 0.55rem 0.75rem; font-size: 0.82rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-main); resize: vertical;"></textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.5rem; border-top: 1px solid var(--border-subtle); padding-top: 0.85rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddMcpEndpointModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btnSubmitAddEndpoint" style="font-weight: 700; background: linear-gradient(135deg, #0284c7, #0369a1); border: none;">
+                        💾 Save Endpoint &amp; Connect
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
     
     <!-- Register Agent Contract Modal -->
     <div id="registerAgentModal" class="modal-overlay">
@@ -13843,11 +13986,12 @@ async function fetchHealthOverview() {
         let currentMcpScanReport = null;
 
         function switchMcpSubTab(subTab) {
-            const tabs = ['askData', 'shareData', 'activityLog', 'guides', 'scanNineRules'];
+            const tabs = ['endpoints', 'askData', 'shareData', 'activityLog', 'guides', 'scanNineRules'];
             tabs.forEach(t => {
                 const pane = document.getElementById('mcpSubTab' + t.charAt(0).toUpperCase() + t.slice(1));
                 let btn = null;
-                if (t === 'askData') btn = document.getElementById('btnMcpSubTabAsk');
+                if (t === 'endpoints') btn = document.getElementById('btnMcpSubTabEndpoints');
+                else if (t === 'askData') btn = document.getElementById('btnMcpSubTabAsk');
                 else if (t === 'shareData') btn = document.getElementById('btnMcpSubTabShare');
                 else if (t === 'activityLog') btn = document.getElementById('btnMcpSubTabLog');
                 else if (t === 'guides') btn = document.getElementById('btnMcpSubTabGuides');
@@ -13871,11 +14015,448 @@ async function fetchHealthOverview() {
                 }
             });
 
-            if (subTab === 'activityLog') {
+            if (subTab === 'endpoints') {
+                fetchMcpEndpointsUI();
+            } else if (subTab === 'activityLog') {
                 fetchMcpExchangeHistoryUI();
             } else if (subTab === 'shareData') {
                 fetchMcpInboundToolsUI();
                 fetchSharedRecordsListUI();
+            }
+        }
+
+        // ==============================================================
+        // MANAGED MCP ENDPOINTS & REGISTRY CONTROLLER
+        // ==============================================================
+        let mcpRegisteredEndpoints = [];
+        let currentEndpointCategoryFilter = 'ALL';
+
+        async function fetchMcpEndpointsUI(forceRefresh = false) {
+            try {
+                const res = await fetch('/api/v1/mcp/endpoints');
+                const json = await res.json();
+                if (json.success && Array.isArray(json.endpoints)) {
+                    mcpRegisteredEndpoints = json.endpoints;
+                } else {
+                    const saved = localStorage.getItem('watchtower_saved_mcp_endpoints');
+                    if (saved) {
+                        try { mcpRegisteredEndpoints = JSON.parse(saved); } catch (_) {}
+                    }
+                }
+            } catch (err) {
+                const saved = localStorage.getItem('watchtower_saved_mcp_endpoints');
+                if (saved) {
+                    try { mcpRegisteredEndpoints = JSON.parse(saved); } catch (_) {}
+                }
+            }
+
+            if (mcpRegisteredEndpoints.length > 0) {
+                try { localStorage.setItem('watchtower_saved_mcp_endpoints', JSON.stringify(mcpRegisteredEndpoints)); } catch (_) {}
+            }
+
+            const badgeCount = document.getElementById('badgeMcpEndpointsCount');
+            const valCount = document.getElementById('valMcpManagedEndpointsCount');
+            const pillTotal = document.getElementById('pillMcpEndpointsTotal');
+            const countStr = `${mcpRegisteredEndpoints.length} Endpoints`;
+
+            if (badgeCount) badgeCount.innerText = String(mcpRegisteredEndpoints.length);
+            if (valCount) valCount.innerText = countStr;
+            if (pillTotal) pillTotal.innerText = `${mcpRegisteredEndpoints.length} SAVED`;
+
+            updateMcpSavedDropdowns();
+            renderMcpEndpointsGrid(mcpRegisteredEndpoints);
+        }
+
+        function updateMcpSavedDropdowns() {
+            const askSel = document.getElementById('selMcpSavedForAsk');
+            const scanSel = document.getElementById('selMcpSavedForScan');
+
+            const optionsHtml = '<option value="">-- Choose from your Managed MCP Endpoints --</option>' +
+                mcpRegisteredEndpoints.map(ep => `
+                    <option value="${escapeHtml(ep.id)}">
+                        ${escapeHtml(ep.name)} (${escapeHtml(ep.category || 'MCP')} · ${escapeHtml(ep.url)})
+                    </option>
+                `).join('');
+
+            if (askSel) askSel.innerHTML = optionsHtml;
+            if (scanSel) scanSel.innerHTML = optionsHtml;
+        }
+
+        function renderMcpEndpointsGrid(endpointsList) {
+            const gridEl = document.getElementById('mcpEndpointsCardGrid');
+            if (!gridEl) return;
+
+            const cntAll = document.getElementById('cntFilterAll');
+            const cntConn = document.getElementById('cntFilterConnected');
+            const cntUnreach = document.getElementById('cntFilterUnreachable');
+
+            if (cntAll) cntAll.innerText = String(mcpRegisteredEndpoints.length);
+            if (cntConn) cntConn.innerText = String(mcpRegisteredEndpoints.filter(e => e.status === 'CONNECTED').length);
+            if (cntUnreach) cntUnreach.innerText = String(mcpRegisteredEndpoints.filter(e => e.status === 'UNREACHABLE').length);
+
+            let filtered = endpointsList || mcpRegisteredEndpoints;
+            const searchInput = document.getElementById('txtSearchMcpEndpoints');
+            const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+            if (currentEndpointCategoryFilter === 'CONNECTED') {
+                filtered = filtered.filter(e => e.status === 'CONNECTED');
+            } else if (currentEndpointCategoryFilter === 'UNREACHABLE') {
+                filtered = filtered.filter(e => e.status === 'UNREACHABLE');
+            }
+
+            if (query) {
+                filtered = filtered.filter(e =>
+                    (e.name || '').toLowerCase().includes(query) ||
+                    (e.url || '').toLowerCase().includes(query) ||
+                    (e.category || '').toLowerCase().includes(query) ||
+                    (e.description || '').toLowerCase().includes(query)
+                );
+            }
+
+            if (filtered.length === 0) {
+                gridEl.innerHTML = `
+                    <div style="grid-column: 1 / -1; background: var(--bg-card); border: 1px dashed var(--border-subtle); border-radius: var(--radius-sm); padding: 3rem 1.5rem; text-align: center;">
+                        <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">🔌</div>
+                        <h4 style="color: var(--text-main); font-weight: 700; margin-bottom: 0.35rem;">No MCP Endpoints Found</h4>
+                        <div style="font-size: 0.82rem; color: var(--text-muted); max-width: 460px; margin: 0 auto 1.25rem;">
+                            ${query ? `No saved endpoints match '${escapeHtml(query)}'. Try clearing your filter.` : 'You haven\'t added any custom MCP endpoints yet. Click below to add an external web application or agent endpoint!'}
+                        </div>
+                        <button class="btn btn-primary" onclick="openAddMcpEndpointModal()" style="font-weight: 700;">
+                            <span>➕</span> Add New MCP Endpoint
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            gridEl.innerHTML = filtered.map(ep => {
+                const isConn = ep.status === 'CONNECTED';
+                const isUnreach = ep.status === 'UNREACHABLE';
+                const statusClass = isConn ? 'status-PASS' : (isUnreach ? 'status-FAIL' : 'status-SKIPPED');
+                const statusText = isConn ? 'CONNECTED' : (isUnreach ? 'UNREACHABLE' : 'UNTESTED');
+                const latencyText = ep.latencyMs ? `${ep.latencyMs}ms` : '--';
+                const toolsCount = ep.toolsCount !== undefined ? ep.toolsCount : 0;
+
+                return `
+                    <div class="metric-card" style="display: flex; flex-direction: column; justify-content: space-between; gap: 0.85rem; border-left: 4px solid ${isConn ? 'var(--accent-emerald)' : (isUnreach ? 'var(--accent-rose)' : 'var(--primary)')};">
+                        <div>
+                            <!-- Header Row -->
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.35rem;">
+                                <div>
+                                    <div style="font-weight: 800; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
+                                        <span>🔌</span>
+                                        <span>${escapeHtml(ep.name)}</span>
+                                    </div>
+                                    <span class="status-pill" style="font-size: 0.65rem; background: rgba(2, 132, 199, 0.12); color: var(--accent-cyan); font-weight: 700; margin-top: 3px; display: inline-block;">
+                                        ${escapeHtml(ep.category || 'MCP Service')}
+                                    </span>
+                                </div>
+                                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
+                                    <span class="status-pill ${statusClass}" id="pillStatus_${escapeHtml(ep.id)}" style="font-size: 0.65rem; padding: 2px 7px; font-weight: 700;">${statusText}</span>
+                                    <span id="txtLatency_${escapeHtml(ep.id)}" style="font-size: 0.7rem; font-family: monospace; color: var(--text-dim);">${latencyText}</span>
+                                </div>
+                            </div>
+
+                            <!-- URL Display with Copy -->
+                            <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.35rem 0.6rem; margin-bottom: 0.5rem; gap: 0.4rem;">
+                                <code style="font-size: 0.75rem; color: var(--accent-cyan); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">${escapeHtml(ep.url)}</code>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="copyToClipboard('${escapeHtml(ep.url)}')" style="padding: 1px 6px; font-size: 0.68rem;" title="Copy URL">📋</button>
+                            </div>
+
+                            <!-- Description -->
+                            <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.35; margin-bottom: 0.5rem;">
+                                ${escapeHtml(ep.description || 'No description provided.')}
+                            </div>
+
+                            <!-- Tools badge -->
+                            <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 0.25rem;">
+                                <span>🛠️ Discovered Tools:</span>
+                                <strong id="txtToolsCount_${escapeHtml(ep.id)}" style="color: var(--primary);">${toolsCount} Tools Available</strong>
+                            </div>
+                        </div>
+
+                        <!-- Action Toolbar -->
+                        <div style="display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid var(--border-subtle); padding-top: 0.65rem;">
+                            <!-- Primary Workflow Actions -->
+                            <div style="display: flex; gap: 0.4rem; width: 100%;">
+                                <button class="btn btn-sm btn-primary" onclick="quickActionScanNineRules('${escapeHtml(ep.url)}', '${escapeHtml(ep.name)}', '${escapeHtml(ep.description || '')}')" style="flex: 1; font-weight: 700; font-size: 0.76rem; background: linear-gradient(135deg, #10b981, #059669); border: none; display: flex; align-items: center; justify-content: center; gap: 0.3rem;" title="Run 9-Rule Scan on this MCP endpoint">
+                                    <span>🛡️</span> 9-Rule Scan
+                                </button>
+                                <button class="btn btn-sm btn-secondary" onclick="quickActionAskData('${escapeHtml(ep.url)}', '${escapeHtml(ep.name)}')" style="flex: 1; font-weight: 700; font-size: 0.76rem; color: var(--primary); display: flex; align-items: center; justify-content: center; gap: 0.3rem;" title="Ask & Take Data from this endpoint">
+                                    <span>📥</span> Ask Data
+                                </button>
+                            </div>
+                            <!-- Utility Actions -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.35rem;">
+                                <button class="btn btn-secondary btn-sm" id="btnProbe_${escapeHtml(ep.id)}" onclick="probeMcpEndpointUI('${escapeHtml(ep.id)}')" style="flex: 1; font-size: 0.72rem; padding: 0.3rem 0.5rem;">⚡ Probe</button>
+                                <button class="btn btn-secondary btn-sm" onclick="quickDiscoverToolsForEndpoint('${escapeHtml(ep.url)}', '${escapeHtml(ep.id)}')" style="flex: 1; font-size: 0.72rem; padding: 0.3rem 0.5rem;">🔍 Tools</button>
+                                ${!ep.isDefault ? `
+                                    <button class="btn btn-secondary btn-sm" onclick="deleteMcpEndpointUI('${escapeHtml(ep.id)}', '${escapeHtml(ep.name)}')" style="font-size: 0.72rem; padding: 0.3rem 0.5rem; color: var(--accent-rose);" title="Remove endpoint">🗑️</button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterMcpEndpointsUI() {
+            renderMcpEndpointsGrid(mcpRegisteredEndpoints);
+        }
+
+        function setEndpointCategoryFilter(filter) {
+            currentEndpointCategoryFilter = filter;
+            const btnAll = document.getElementById('btnFilterEpAll');
+            const btnConn = document.getElementById('btnFilterEpConnected');
+            const btnUnreach = document.getElementById('btnFilterEpUnreachable');
+
+            if (btnAll) btnAll.className = filter === 'ALL' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+            if (btnConn) btnConn.className = filter === 'CONNECTED' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+            if (btnUnreach) btnUnreach.className = filter === 'UNREACHABLE' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+
+            renderMcpEndpointsGrid(mcpRegisteredEndpoints);
+        }
+
+        function openAddMcpEndpointModal() {
+            const modal = document.getElementById('addMcpEndpointModal');
+            const errEl = document.getElementById('addMcpEndpointError');
+            const hintEl = document.getElementById('modalMcpProbeHint');
+            if (errEl) errEl.style.display = 'none';
+            if (hintEl) hintEl.innerHTML = '';
+            const form = document.getElementById('formAddMcpEndpoint');
+            if (form) form.reset();
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeAddMcpEndpointModal() {
+            const modal = document.getElementById('addMcpEndpointModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function testModalEndpointConnectivity() {
+            const urlInput = document.getElementById('txtNewMcpUrl');
+            const hintEl = document.getElementById('modalMcpProbeHint');
+            if (!urlInput || !hintEl) return;
+            const url = urlInput.value.trim();
+            if (!url) {
+                hintEl.innerHTML = '<span style="color: var(--accent-rose);">Please enter a server URL first.</span>';
+                return;
+            }
+            hintEl.innerHTML = '<span style="color: var(--primary);">⏳ Testing handshake...</span>';
+            try {
+                const res = await fetch('/api/v1/mcp/external/test-connection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ serverUrl: url })
+                });
+                const json = await res.json();
+                if (json.success && json.data && json.data.connected) {
+                    hintEl.innerHTML = `<span style="color: var(--accent-emerald); font-weight: 700;">✅ Connected! (${json.data.latencyMs}ms latency) · Protocol 2024-11-05</span>`;
+                } else {
+                    hintEl.innerHTML = `<span style="color: var(--accent-amber);">⚠️ Endpoint reached (${json.data ? json.data.latencyMs : 0}ms) — Server status: ${json.data ? json.data.statusCode : 'Uncertain'}</span>`;
+                }
+            } catch (err) {
+                hintEl.innerHTML = `<span style="color: var(--accent-rose);">❌ Handshake failed: ${escapeHtml(err.message)}</span>`;
+            }
+        }
+
+        async function handleAddMcpEndpointSubmit(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnSubmitAddEndpoint');
+            const errEl = document.getElementById('addMcpEndpointError');
+            const nameInput = document.getElementById('txtNewMcpName');
+            const urlInput = document.getElementById('txtNewMcpUrl');
+            const catInput = document.getElementById('selNewMcpCategory');
+            const apiKeyInput = document.getElementById('txtNewMcpApiKey');
+            const descInput = document.getElementById('txtNewMcpDescription');
+
+            const name = nameInput ? nameInput.value.trim() : '';
+            const url = urlInput ? urlInput.value.trim() : '';
+            const category = catInput ? catInput.value : 'Web Application';
+            const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+            const description = descInput ? descInput.value.trim() : '';
+
+            if (!url) {
+                if (errEl) {
+                    errEl.innerText = 'Endpoint URL is required.';
+                    errEl.style.display = 'block';
+                }
+                return;
+            }
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = '⏳ Connecting & Saving...';
+            }
+
+            try {
+                const res = await fetch('/api/v1/mcp/endpoints', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, url, category, apiKey, description })
+                });
+                const json = await res.json();
+                if (json.success && json.endpoint) {
+                    closeAddMcpEndpointModal();
+                    await fetchMcpEndpointsUI(true);
+                    alert(`✅ MCP Endpoint '${json.endpoint.name}' successfully registered! Status: ${json.endpoint.status} (${json.endpoint.latencyMs}ms)`);
+                } else {
+                    if (errEl) {
+                        errEl.innerText = json.error ? json.error.message : 'Failed to register endpoint.';
+                        errEl.style.display = 'block';
+                    }
+                }
+            } catch (err) {
+                if (errEl) {
+                    errEl.innerText = `Network error: ${err.message}`;
+                    errEl.style.display = 'block';
+                }
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = '💾 Save Endpoint & Connect';
+                }
+            }
+        }
+
+        async function probeMcpEndpointUI(id) {
+            const btn = document.getElementById(`btnProbe_${id}`);
+            const pill = document.getElementById(`pillStatus_${id}`);
+            const txtLat = document.getElementById(`txtLatency_${id}`);
+            const txtTools = document.getElementById(`txtToolsCount_${id}`);
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = '⏳ ...';
+            }
+            if (pill) {
+                pill.className = 'status-pill status-SKIPPED';
+                pill.innerText = 'PROBING';
+            }
+
+            try {
+                const res = await fetch(`/api/v1/mcp/endpoints/${encodeURIComponent(id)}/probe`, { method: 'POST' });
+                const json = await res.json();
+                if (json.success && json.endpoint) {
+                    const ep = json.endpoint;
+                    const idx = mcpRegisteredEndpoints.findIndex(e => e.id === id);
+                    if (idx !== -1) mcpRegisteredEndpoints[idx] = ep;
+
+                    if (pill) {
+                        pill.className = 'status-pill status-PASS';
+                        pill.innerText = 'CONNECTED';
+                    }
+                    if (txtLat) txtLat.innerText = `${ep.latencyMs}ms`;
+                    if (txtTools) txtTools.innerText = `${ep.toolsCount} Tools Available`;
+                } else {
+                    if (pill) {
+                        pill.className = 'status-pill status-FAIL';
+                        pill.innerText = 'UNREACHABLE';
+                    }
+                    if (txtLat) txtLat.innerText = 'timeout';
+                }
+            } catch (err) {
+                if (pill) {
+                    pill.className = 'status-pill status-FAIL';
+                    pill.innerText = 'ERROR';
+                }
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = '⚡ Probe';
+                }
+            }
+        }
+
+        async function probeAllMcpEndpointsUI() {
+            if (mcpRegisteredEndpoints.length === 0) return;
+            const promises = mcpRegisteredEndpoints.map(ep => probeMcpEndpointUI(ep.id));
+            await Promise.all(promises);
+            fetchMcpEndpointsUI();
+        }
+
+        async function deleteMcpEndpointUI(id, name) {
+            if (!confirm(`Are you sure you want to remove MCP Endpoint '${name}' from your registry?`)) return;
+            try {
+                const res = await fetch(`/api/v1/mcp/endpoints/${encodeURIComponent(id)}`, { method: 'DELETE' });
+                const json = await res.json();
+                if (json.success) {
+                    await fetchMcpEndpointsUI(true);
+                } else {
+                    alert('Error: ' + (json.error ? json.error.message : 'Could not delete endpoint'));
+                }
+            } catch (err) {
+                alert('Request error: ' + err.message);
+            }
+        }
+
+        function onSavedEndpointSelectChange(context, epId) {
+            if (!epId) return;
+            const ep = mcpRegisteredEndpoints.find(e => e.id === epId);
+            if (!ep) return;
+
+            if (context === 'ask') {
+                const txtUrl = document.getElementById('txtMcpExternalUrl');
+                if (txtUrl) {
+                    txtUrl.value = ep.url;
+                    testExternalConnectionUI();
+                    discoverExternalToolsUI();
+                }
+            } else if (context === 'scan') {
+                const txtEp = document.getElementById('txtMcpScanEndpoint');
+                const txtApp = document.getElementById('txtMcpScanAppName');
+                const txtPurp = document.getElementById('txtMcpScanPurpose');
+                if (txtEp) txtEp.value = ep.url;
+                if (txtApp) txtApp.value = ep.name;
+                if (txtPurp && ep.description) txtPurp.value = ep.description;
+                testMcpScannerConnUI();
+                discoverMcpScannerToolsUI();
+            }
+        }
+
+        function quickActionScanNineRules(url, name, purpose) {
+            switchMcpSubTab('scanNineRules');
+            const txtEp = document.getElementById('txtMcpScanEndpoint');
+            const txtApp = document.getElementById('txtMcpScanAppName');
+            const txtPurp = document.getElementById('txtMcpScanPurpose');
+            const radMcp = document.querySelector('input[name="radMcpScanType"][value="mcp"]');
+            if (radMcp) radMcp.checked = true;
+            onMcpScanTypeChanged('mcp');
+
+            if (txtEp) txtEp.value = url;
+            if (txtApp) txtApp.value = name;
+            if (txtPurp && purpose) txtPurp.value = purpose;
+            testMcpScannerConnUI();
+            discoverMcpScannerToolsUI();
+        }
+
+        function quickActionAskData(url, name) {
+            switchMcpSubTab('askData');
+            const txtUrl = document.getElementById('txtMcpExternalUrl');
+            if (txtUrl) {
+                txtUrl.value = url;
+                testExternalConnectionUI();
+                discoverExternalToolsUI();
+            }
+        }
+
+        async function quickDiscoverToolsForEndpoint(url, epId) {
+            try {
+                const res = await fetch('/api/v1/mcp/external/discover', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ serverUrl: url })
+                });
+                const json = await res.json();
+                if (json.success && Array.isArray(json.tools)) {
+                    const txtTools = document.getElementById(`txtToolsCount_${epId}`);
+                    if (txtTools) txtTools.innerText = `${json.tools.length} Tools Discovered`;
+                    alert(`Tools on '${url}':\n\n` + json.tools.map(t => `• ${t.name}: ${t.description || 'No description'}`).join('\n'));
+                } else {
+                    alert(`Could not discover tools on '${url}'.`);
+                }
+            } catch (err) {
+                alert(`Discovery error: ${err.message}`);
             }
         }
 
@@ -14288,6 +14869,7 @@ async function fetchHealthOverview() {
                     discoverExternalToolsUI(true);
                 }
 
+                fetchMcpEndpointsUI();
                 fetchMcpInboundToolsUI();
                 fetchSharedRecordsListUI();
             } catch (err) {
